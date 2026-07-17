@@ -1,0 +1,25 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite" 
+}
+
+// One row per indexed PDF from the external article repository.
+// `url` is the relative path exactly as returned by ARTICLES_LIST_URL
+// (e.g. "libgen.scimag00100000-00100999/10.1002/....pdf") — it's the
+// natural unique key since that's also how we re-check "already indexed?"
+// on every /make-science visit.
+model Article {
+  id          String   @id @default(cuid())
+  url         String   @unique
+  pdfUrl      String
+  title       String
+  abstract    String
+  firstPage   String? // raw extracted first-page text, kept for debugging/re-processing
+  pageCount   Int?
+  status      String   @default("indexed") // "indexed" | "failed"
+  errorReason String?
+  createdAt   DateTime @default(now())
+}
