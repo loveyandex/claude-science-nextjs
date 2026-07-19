@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-dvh w-full bg-background text-foreground">
       {/* Icon rail (desktop) */}
-      <aside className="hidden md:flex flex-col items-center w-14 shrink-0 border-r border-border bg-sidebar py-4 gap-1">
+      <aside className="hidden md:flex flex-col items-center w-14 shrink-0 border-r border-border/60 bg-sidebar py-4 gap-1">
         <div className="w-8 h-8 rounded-md bg-foreground flex items-center justify-center mb-4">
           <Sparkles size={15} className="text-accent" strokeWidth={2.2} />
         </div>
@@ -47,14 +47,14 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1 flex-col min-w-0">
         {/* Header */}
-        <header className="flex items-center justify-between px-4 py-3 border-b border-border bg-card shrink-0">
+        <header className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-md bg-foreground flex items-center justify-center md:hidden">
               <Sparkles size={14} className="text-accent" strokeWidth={2.2} />
             </div>
             <div className="leading-tight">
               <h1 className="font-display font-semibold text-[15px] tracking-tight">
-                local science
+                locaul science
               </h1>
               <p className="font-mono text-[10px] text-muted-foreground">
                 {STAT_PAPERS_INDEXED} papers indexed
@@ -63,7 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* mobile nav */}
-          <nav className="flex md:hidden bg-sidebar rounded-lg p-0.5 border border-border">
+          <nav className="flex md:hidden bg-sidebar rounded-lg p-0.5 border border-border/60">
             {NAV_ITEMS.map((item) => {
               const active = pathname?.startsWith(item.href);
               const Icon = item.icon;

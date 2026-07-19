@@ -1,84 +1,103 @@
-# local science
+# locaul science
 
 A Next.js (App Router) app: chat with an LLM grounded in your own locally-indexed paper
 library, plus a pipeline that reads real PDFs from your article repo, extracts title + abstract
-with an LLM, and saves them to a local SQLite database via Prisma.
-
-> Renamed from the earlier "claude / science" MVP — same functionality, new name, real Claude
-> palette, and two chat implementations to compare (see below). I read "locaul science" as a
-> typo for **"local science"** (fits the app: everything runs against your own local repo/DB) —
-> flag it if you meant something else and I'll rename again.
+with an LLM, and saves them to a local SQLite database via Prisma (v7, driver-adapter pattern).
 
 ## What's here
 
-- **`/make-science`** — indexing pipeline (unchanged from the last build, per your instructions
-  not to touch its features). Diffs your repo's article list against the local DB every visit,
-  streams progress while it fetches each PDF, reads the first page, and asks the LLM for a clean
-  title + abstract.
-- **`/chat`** — the production chat surface. Restyled this pass to actually match claude.ai
-  (see "Design system" below) instead of the small-type generic version from before.
-- **`/chat-assist-ui`** — a second, fuller chat build following assistant-ui's own published
-  ["Claude Clone" reference example](https://www.assistant-ui.com/examples/claude) more
-  literally (topic chips, attachment row, edit-message, thumbs up/down). Same `/api/chat`
-  backend as `/chat` — this is a testing/comparison surface, not a separate product.
+- **`/make-science`** — indexing pipeline (unchanged across this and the prior pass, per
+  instructions not to touch its features). Diffs your repo's article list against the local DB
+  every visit, streams progress while it fetches each PDF, reads the first page, and asks the
+  LLM for a clean title + abstract.
+- **`/chat`** — the production chat surface, restyled this pass to match claude.ai's actual
+  token values and interaction patterns (see "This pass's fixes" below).
+- **`/chat-assist-ui`** — a second, fuller chat build following assistant-ui's own
+  ["Claude Clone" reference example](https://www.assistant-ui.com/examples/claude) more closely
+  (topic chips, attachment row, edit-message, thumbs up/down). Same `/api/chat` backend as
+  `/chat` — a comparison/testing surface, not a separate product.
 - **`/library`** — the original dummy-data paper search/browse pages, untouched.
 
-Both chat pages call the same `POST /api/chat`, which uses AI SDK v7's `streamText` with a
-`searchArticles` tool that queries the **`Article` table directly** (not `ARTICLES_LIST_URL`) —
-so chat is grounded in what's actually been indexed via `/make-science`, using just the first
-page of each PDF, as you asked.
+Both chat pages call the same `POST /api/chat` (AI SDK v7 `streamText`), which now has **four**
+tools over the local `Article` table (not `ARTICLES_LIST_URL` — chat only ever sees what's
+actually been indexed):
 
-## Design system (this pass)
+| Tool | Needs a keyword? | Use |
+|---|---|---|
+| `searchArticles` | yes | keyword search across title/abstract |
+| `listRecentArticles` | no | "what's in the library" / browse newest-first |
+| `getLibraryStats` | no | indexed/failed counts, most recent indexing activity |
+| `getArticleByUrl` | no (needs a url) | pull one article's full record after a search hit |
 
-The previous version used an approximated "Claude-inspired" palette. This one uses the **actual
-token values from claude.ai's own stylesheet** (the CSS you pasted) — `--bg-100/200/000`,
-`--text-000/400`, `--accent-brand`, `--danger-100`, etc. — remapped onto this project's existing
-Tailwind color names (`background`, `card`, `sidebar`, `foreground`, `muted-foreground`,
-`border`, `accent`) in `src/app/globals.css`, so nothing elsewhere in the app (library,
-make-science) needed to change to pick up the real colors.
+## This pass's fixes
 
-Chat specifically also now uses:
+**F1 — chat UI/UX.** The real problem wasn't just color, it was boxiness: every tool call, every
+suggestion chip, every panel had its own bordered rectangle, which reads as visual noise
+stacked up in a transcript. Fixed:
+- Colors now come directly from the dark-mode token dump you pasted (`gray-750/800/840/900` for
+  surfacing, `gray-0/350` for text) — mapped onto this project's existing token names in
+  `src/app/globals.css` so nothing else needed to change to pick it up.
+- **`--sidebar` is now literally the same color as `--background`**, per your note — they're
+  separated by a `border-border/60`–`/70` hairline, never a fill-color difference. Applied to the
+  icon rail, header, and mobile tab switcher in `app-shell.tsx`.
+- Borders generally moved from full-opacity to `/60`–`/70` opacity across the board (composer,
+  suggestion chips, thread rail) — same hue, much quieter line, which is what "thin" actually
+  means in claude.ai's own CSS (they do this with the exact same technique, opacity modifiers on
+  a light-in-dark / dark-in-light border color, not a sub-pixel border width).
 
-- **`font-serif`** (Source Serif 4 — a stand-in for Anthropic's actual "Anthropic Serif", which
-  is a private webfont asset served from Anthropic's own CDN and not something to hot-link into
-  a separate app) at **16px body / 1.7 line-height**, not the previous 12–13.5px
-- A borderless, rounded composer (`border` only, no shadow) with a big `Sparkle` greeting,
-  exactly like claude.ai's empty state
-- User messages as a soft rounded bubble (`bg-sidebar`), assistant messages as plain text with
-  no bubble/avatar — action icons (copy, thumbs up/down, regenerate) fade in on hover only,
-  matching claude.ai's chrome
+**F4 — tool call UX.** Completely rebuilt in `src/components/assistant-ui/tool-call.tsx`:
+collapsed by default to a single ghost row (icon + short human-readable status + chevron, no box,
+just a hover highlight), expands on click to show clean key/value args and a formatted result
+list — not a raw JSON dump in a bordered rectangle. Also added
+`src/components/assistant-ui/thinking-indicator.tsx`: a small sparkle + pulsing-dots row shown
+specifically while `message.status.type === "running" && message.content.length === 0` — i.e.
+genuinely waiting on the first token/part from the API — and it disappears the instant anything
+(text or a tool call) starts streaming in. Both pieces are shared between `/chat` and
+`/chat-assist-ui`.
+
+**More search tools**, per your ask for search "without keywords": `listRecentArticles` and
+`getLibraryStats` need no query at all; `getArticleByUrl` needs a url but not a keyword. The
+system prompt in `/api/chat/route.ts` now explicitly tells the model which tool fits which kind
+of question, and explicitly says to use the real tool-calling mechanism rather than writing tool
+JSON out as plain text — the garbled `{"tool": "functions.searchArticles", ...}` text you saw in
+your screenshots was the model narrating a malformed call instead of actually issuing one; a
+clearer system prompt plus `searchArticles.query` now being required-and-non-empty (so the model
+can't call it with `{}` and get zero results) should reduce that. This is a model/endpoint
+behavior question as much as a prompt one — if it persists with your specific `OPENAI_BASE_URL`
+model, it's worth checking whether that endpoint fully supports native tool-calling.
+
+**Branding** — renamed to **locaul science** (your explicit correction) everywhere: page title,
+`package.json` name, the internal model provider label, and this README.
+
+**Prisma v7 driver-adapter migration** — per your note, switched to the `@prisma/adapter-better-sqlite3`
++ `better-sqlite3` pattern:
+- `prisma/schema.prisma`: `datasource` block no longer has a `url` — that config moved to...
+- `prisma.config.ts` (new): `defineConfig({ schema, datasource: { url: process.env.DATABASE_URL } })`,
+  used by CLI commands (`db push`, `studio`, etc).
+- `src/lib/prisma.ts`: `PrismaClient` is now constructed with an explicit `adapter: new
+  PrismaBetterSqlite3({ url })` — Prisma 7 requires this; there's no more implicit
+  `DATABASE_URL`-only connection.
+- `next.config.mjs`: added `better-sqlite3` and `@prisma/adapter-better-sqlite3` to
+  `serverComponentsExternalPackages` since better-sqlite3 is a native binding, not a bundle-able
+  JS module.
+
+## Design reference
+
+`.agents/skills/frontend-ui-conventions/SKILL.md` — the token table, chat-specific UI patterns
+(ghost tool calls, hover-only action bars, sidebar=background), and a note on which Radix Themes
+components (Skeleton, Scroll Area, Data List, etc.) are worth reaching for later instead of
+hand-rolling. Read this before touching any page's styling.
 
 ## Stack
 
 - Next.js 14 (App Router) + TypeScript
-- Prisma + SQLite — `Article` model (`prisma/schema.prisma`)
+- Prisma 7 (driver adapters) + `better-sqlite3` — `Article` model (`prisma/schema.prisma`)
 - `unpdf` — extracts text from the first page of each PDF
 - Vercel AI SDK **v7** (`ai@7`, `@ai-sdk/react`, `@ai-sdk/openai-compatible`) — `streamText`,
   `generateObject`, tool calling
 - `@assistant-ui/react` + `@assistant-ui/react-ai-sdk` + `@assistant-ui/react-markdown` — chat
   UI/UX for both `/chat` and `/chat-assist-ui`
 - Tailwind + hand-rolled shadcn/ui-style primitives (`src/components/ui/`)
-
-### About the assistant-ui CLI
-
-You linked `npx assistant-ui@latest init` / `npx assistant-ui add thread`. I tried both — the
-CLI itself runs fine, but it pulls component source from `r.assistant-ui.com`, which this
-sandbox's network allowlist blocks (same restriction that blocks Prisma's engine binaries and
-Google Fonts here — none of this is a problem on your machine with normal internet access).
-
-So instead of a manual reconstruction, I fetched the actual published reference source over
-`raw.githubusercontent.com` (which *is* allowlisted) — `apps/docs/components/examples/claude.tsx`
-from the assistant-ui repo — and adapted that directly for `/chat-assist-ui`, and used the same
-primitives/patterns to redo `/chat`'s Thread component. Both are the real
-`ThreadPrimitive`/`MessagePrimitive`/`ComposerPrimitive`/`AuiIf` APIs, not a re-implementation.
-
-If you want the literal CLI-scaffolded files (identical result, just fetched a different way),
-running this yourself will work since your machine has normal network access:
-
-```bash
-npx assistant-ui@latest init
-npx assistant-ui@latest add thread
-```
 
 ## One-time setup
 
@@ -104,58 +123,53 @@ OPENAI_BASE_URL="https://api.openai.com/v1"
 MODEL_NAME="gpt-4o-mini"
 ```
 
-> **Note on this build:** the sandbox I worked in blocks `binaries.prisma.sh` (Prisma's engine
-> download), `r.assistant-ui.com` (the assistant-ui component registry), and your private
-> `10.80.31.12` repo, so I couldn't run `prisma generate`, the real CLI, or the actual indexing
-> loop against your server here. Everything else typechecks cleanly (`npx tsc --noEmit`) and
-> `npm run build` gets through webpack compilation fine — the only remaining error is the
-> Prisma-client-not-generated cascade, which resolves the moment you run `npx prisma db push`
-> with real network access.
+> **Note on this build:** the sandbox I worked in blocks `binaries.prisma.sh` (Prisma's
+> schema-engine download — needed even with the driver-adapter pattern, since `prisma generate`
+> still validates the schema through it), `fonts.googleapis.com`, `r.assistant-ui.com`, and your
+> private `10.80.31.12` repo. I could not run `prisma generate`, `npx prisma db push`, or the
+> real indexing loop here. Everything else typechecks cleanly (`npx tsc --noEmit` — down to
+> exactly one error, the un-generated `PrismaClient` export, which is the direct and only
+> consequence of the blocked download) and `npm run build` gets through webpack compilation and
+> font handling fine — it stops at that same single Prisma step. Once you run `npx prisma db
+> push` locally with real network access, that error resolves and the rest of the build proceeds
+> — nothing else in this pass depends on network access this sandbox doesn't have.
 
 ## Project structure
 
 ```
-prisma/schema.prisma          Article model (SQLite)
+prisma/schema.prisma          Article model (SQLite, v7 driver-adapter — no url in datasource)
+prisma.config.ts               CLI-only datasource URL (Prisma 7 pattern)
 src/lib/
-  prisma.ts                    Prisma client singleton
+  prisma.ts                    PrismaClient + PrismaBetterSqlite3 adapter
   pdf.ts                       first-page text extraction (unpdf)
   ai-provider.ts                shared OpenAI-compatible model from env
-  articles-source.ts             fetch repo list + build PDF URLs
+  articles-source.ts             fetch repo list + build PDF URLs (make-science only)
 src/app/
   api/articles/pending/route.ts   GET  — diff repo list vs DB
   api/articles/index/route.ts      POST — streaming indexing loop
-  api/chat/route.ts                POST — streamText + searchArticles tool (Article table)
+  api/chat/route.ts                POST — streamText + 4 tools over the Article table
   make-science/page.tsx             indexing UX (unchanged)
   chat/page.tsx                     production chat page
   chat-assist-ui/page.tsx            assistant-ui reference/testing chat page
   library/, library/[id]/            existing dummy-data library (unchanged)
 src/components/
-  assistant-ui/thread.tsx           /chat's Thread (Claude-styled: serif, hover actions, sparkle)
-  assistant-ui/thread-assist-ui.tsx  /chat-assist-ui's Thread (fuller reference build)
+  assistant-ui/thread.tsx           /chat's Thread
+  assistant-ui/thread-assist-ui.tsx  /chat-assist-ui's Thread
+  assistant-ui/tool-call.tsx          shared ghost/collapsible tool-call UI
+  assistant-ui/thinking-indicator.tsx  shared "waiting for first token" indicator
   app-shell.tsx                     nav: Chat / Chat (assistant-ui) / Library / Index
+.agents/skills/frontend-ui-conventions/SKILL.md   design tokens + patterns reference
 ```
 
 ## Migrating this MVP to production-grade
 
-Things to do before this is more than a local tool, roughly in priority order:
-
-1. **Auth.** Nothing is gated right now — anyone hitting `/make-science` can trigger indexing,
-   and chat has no per-user history/isolation. Add `next-auth`/Clerk/whatever you use elsewhere,
-   gate the API routes, and scope `Article`/chat history to a user or workspace.
-2. **Swap SQLite for Postgres.** Fine for one process; won't survive concurrent writers or a
-   real deployment. Prisma's schema/migrations mostly carry over — mainly changing the
-   `datasource` provider and connection string, plus revisiting the `contains` search (Postgres
-   gives you `mode: "insensitive"`, which SQLite's connector doesn't support).
-3. **Background indexing, not a button.** `/make-science` is manual/click-triggered right now.
-   A real deployment wants a cron/queue worker calling the same logic in
-   `src/app/api/articles/index/route.ts` until `pendingCount` hits 0, with retries and dead
-   letter handling for PDFs that keep failing extraction.
-4. **Semantic search.** `searchArticles` is plain SQL `contains` today, per your instruction to
-   skip Qdrant for now. When you're ready, this is the first thing to swap for embeddings —
-   the tool's interface (query in, ranked results out) doesn't need to change, just what's
-   behind it.
-5. **Rate limiting + cost controls on `/api/chat` and `/api/articles/index`** — both call an
-   LLM per request/per article with no caps right now.
-6. **Move the Prisma client generation into CI**, not `postinstall` — `postinstall` running
-   `prisma generate` is fine for local dev but you'll want an explicit build step in whatever
-   CI/CD you use so a flaky Prisma binary download doesn't fail unrelated deploys.
+1. **Auth.** Nothing is gated right now.
+2. **Postgres over SQLite** once there's more than one concurrent writer — the driver-adapter
+   pattern in `src/lib/prisma.ts` makes this a matter of swapping `@prisma/adapter-better-sqlite3`
+   for `@prisma/adapter-pg` (or similar) plus the `datasource` provider, not a rewrite.
+3. **Background indexing worker**, not a manual button on `/make-science`.
+4. **Semantic search** — `searchArticles` is still plain SQL `contains`, per your instruction to
+   skip Qdrant for now. The tool's interface (query in, ranked results out) doesn't need to
+   change when you swap the implementation.
+5. **Rate limiting + cost controls** on `/api/chat` and `/api/articles/index`.
+6. **CI-driven `prisma generate`**, not relying on `postinstall` alone.

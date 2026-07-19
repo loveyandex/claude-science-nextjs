@@ -13,27 +13,31 @@
        text-000/400, accent-brand, danger-100) so this reads as the actual
        Claude palette rather than an approximation. */
     --background: 48 33.3% 97.1%;
-    --sidebar: 53 28.6% 94.5%;
+    --sidebar: 48 33.3% 97.1%; /* same as background — thin border separates, not color */
     --card: 0 0% 100%;
     --foreground: 60 2.6% 7.6%;
     --muted-foreground: 51 3.1% 43.7%;
-    --border: 48 25% 92.2%;
+    --border: 45 22% 89%;
     --accent: 15 63.1% 59.6%;
     --accent-foreground: 0 0% 100%;
     --destructive: 0 56.2% 45.4%;
   }
 
   .dark {
-    /* claude.ai's real dark-mode token values. */
-    --background: 60 2.7% 14.5%;
-    --sidebar: 30 3.3% 11.8%;
-    --card: 60 2.1% 18.4%;
-    --foreground: 48 33.3% 97.1%;
-    --muted-foreground: 48 4.8% 59.2%;
-    --border: 43 6% 23%;
-    --accent: 15 63.1% 59.6%;
+    /* Sourced directly from claude.ai's own dark-mode raw color scale
+       (gray-750/800/840/900 for surfaces, gray-0/200/350 for text) rather
+       than an approximation. Per instruction: --bg-100 is the background
+       for BOTH the chat area and the sidebar — they're the same color,
+       separated only by a thin border, exactly like the real app. */
+    --background: 60 2% 12%; /* gray-800 (bg-100) */
+    --sidebar: 60 2% 12%; /* same as background — hairline border does the separating */
+    --card: 60 3% 21%; /* gray-750 (bg-000) — slightly lighter, elevated surface (composer) */
+    --foreground: 0 0% 100%; /* gray-0 (text-000) */
+    --muted-foreground: 48 5% 57%; /* gray-350 (text-300) */
+    --border: 40 2% 26%; /* gray-650 — subtle, thin hairline between bg and text */
+    --accent: 15 63.1% 59.6%; /* accent-brand — consistent across both light/dark dumps */
     --accent-foreground: 0 0% 100%;
-    --destructive: 0 67% 59.6%;
+    --destructive: 0 73% 59%; /* red-400 */
   }
 
   * {

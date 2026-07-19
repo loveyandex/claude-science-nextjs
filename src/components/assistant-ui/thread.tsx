@@ -15,11 +15,12 @@ import {
   RefreshCcw,
   Copy,
   Check,
-  Search,
   Square,
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
+import { ToolFallback } from "@/components/assistant-ui/tool-call";
+import { ThinkingIndicator } from "@/components/assistant-ui/thinking-indicator";
 
 // The Text slot expects a component with no meaningful external props (it
 // reads the streamed content from context) — wrapping like this is the
@@ -76,7 +77,7 @@ function EmptyState() {
               key={p}
               prompt={p}
               send
-              className="rounded-lg border border-border bg-transparent px-3.5 py-2 font-serif text-sm text-muted-foreground transition-colors hover:bg-card hover:text-foreground"
+              className="rounded-lg border border-border/60 bg-transparent px-3.5 py-2 font-serif text-sm text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
             >
               {p}
             </ThreadPrimitive.Suggestion>
@@ -89,7 +90,7 @@ function EmptyState() {
 
 function Composer() {
   return (
-    <ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl border border-border bg-card px-4 pt-3.5 pb-3 shadow-sm">
+    <ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl border border-border/70 bg-card px-4 pt-3.5 pb-3 shadow-sm">
       <ComposerPrimitive.Input
         placeholder="How can I help you today?"
         rows={1}
@@ -151,6 +152,9 @@ function UserMessage() {
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group/message relative mx-auto flex w-full max-w-3xl flex-col py-2">
+      <AuiIf condition={(s) => s.message.status?.type === "running" && s.message.content.length === 0}>
+        <ThinkingIndicator />
+      </AuiIf>
       <div className="font-serif text-base leading-[1.7rem] text-foreground chat-markdown-wrap">
         <MessagePrimitive.Parts
           components={{
@@ -183,26 +187,5 @@ function AssistantMessage() {
         </ActionBarPrimitive.Reload>
       </ActionBarPrimitive.Root>
     </MessagePrimitive.Root>
-  );
-}
-
-/** Generic renderer for any tool call (e.g. searchArticles) that doesn't have a bespoke UI. */
-function ToolFallback({ toolName, argsText, result }: any) {
-  return (
-    <div className="my-2.5 rounded-lg border border-border bg-sidebar px-3.5 py-2.5 font-body">
-      <div className="flex items-center gap-1.5 font-mono text-[10px] uppercase tracking-wide text-accent">
-        <Search size={11} /> {toolName}
-      </div>
-      {argsText && (
-        <p className="mt-1 truncate font-mono text-[10.5px] text-muted-foreground">{argsText}</p>
-      )}
-      {result !== undefined && (
-        <p className="mt-1.5 text-[13px] text-muted-foreground">
-          {typeof result === "object" && result?.count !== undefined
-            ? `Found ${result.count} matching paper${result.count === 1 ? "" : "s"} in the library.`
-            : "Done."}
-        </p>
-      )}
-    </div>
   );
 }

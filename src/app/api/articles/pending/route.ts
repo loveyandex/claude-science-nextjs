@@ -11,7 +11,12 @@ export async function GET() {
       where: { url: { in: allUrls } },
       select: { url: true, status: true },
     });
-    const indexedUrls = new Set(existing.filter((e) => e.status === "indexed").map((e) => e.url));
+    type ArticleUrlStatus = { url: string; status: string };
+    const indexedUrls = new Set(
+      existing
+        .filter((e: ArticleUrlStatus) => e.status === "indexed")
+        .map((e: ArticleUrlStatus) => e.url)
+    );
     const pending = allUrls.filter((u) => !indexedUrls.has(u));
 
     return NextResponse.json({

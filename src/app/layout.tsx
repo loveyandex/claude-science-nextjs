@@ -4,7 +4,7 @@ import { ThemeProvider } from "@/components/theme-provider";
 import { AppShell } from "@/components/app-shell";
 
 export const metadata: Metadata = {
-  title: "local science",
+  title: "locaul science",
   description: "Chat with an LLM grounded in your own locally-indexed paper library.",
 };
 

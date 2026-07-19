@@ -68,7 +68,7 @@ export async function POST(req: Request) {
         where: { url: { in: allUrls }, status: "indexed" },
         select: { url: true },
       });
-      const indexedSet = new Set(existing.map((e) => e.url));
+      const indexedSet = new Set(existing.map((e: { url: string }) => e.url));
       const pending = allUrls.filter((u) => !indexedSet.has(u));
 
       send({ type: "list_fetched", total: allUrls.length, pendingCount: pending.length });

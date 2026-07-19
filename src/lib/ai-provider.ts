@@ -14,7 +14,7 @@ if (!apiKey) {
 }
 
 const provider = createOpenAICompatible({
-  name: "local-science-llm",
+  name: "locaul-science-llm",
   baseURL,
   apiKey,
 });
