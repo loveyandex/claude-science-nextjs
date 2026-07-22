@@ -7,8 +7,6 @@ import {
   ComposerPrimitive,
   ActionBarPrimitive,
 } from "@assistant-ui/react";
-import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   ArrowUp,
   Sparkle,
@@ -19,15 +17,9 @@ import {
   ThumbsUp,
   ThumbsDown,
 } from "lucide-react";
-import { ToolFallback } from "@/components/assistant-ui/tool-call";
-import { ThinkingIndicator } from "@/components/assistant-ui/thinking-indicator";
-
-// The Text slot expects a component with no meaningful external props (it
-// reads the streamed content from context) — wrapping like this is the
-// documented pattern so the prop shapes don't fight each other.
-const MarkdownText = () => (
-  <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} className="chat-markdown" />
-);
+import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { StepFlowParts } from "@/components/assistant-ui/step-flow";
+import { ModelPicker } from "@/components/assistant-ui/model-picker";
 
 const actionButton =
   "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground";
@@ -97,7 +89,8 @@ function Composer() {
         className="block max-h-72 min-h-7 w-full resize-none bg-transparent font-serif text-base text-foreground outline-none placeholder:text-muted-foreground"
       />
       <div className="flex w-full items-center gap-2">
-        <span className="font-mono text-[11px] text-muted-foreground">
+        <ModelPicker />
+        <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
           asks your indexed library first
         </span>
         <div className="ml-auto flex items-center gap-1">
@@ -152,16 +145,8 @@ function UserMessage() {
 function AssistantMessage() {
   return (
     <MessagePrimitive.Root className="group/message relative mx-auto flex w-full max-w-3xl flex-col py-2">
-      <AuiIf condition={(s) => s.message.status?.type === "running" && s.message.content.length === 0}>
-        <ThinkingIndicator />
-      </AuiIf>
-      <div className="font-serif text-base leading-[1.7rem] text-foreground chat-markdown-wrap">
-        <MessagePrimitive.Parts
-          components={{
-            Text: MarkdownText,
-            tools: { Fallback: ToolFallback },
-          }}
-        />
+      <div className="font-serif font-normal text-foreground chat-markdown-wrap">
+        <StepFlowParts />
       </div>
       <ActionBarPrimitive.Root
         hideWhenRunning

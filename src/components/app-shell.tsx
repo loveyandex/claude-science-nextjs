@@ -20,7 +20,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
   return (
     <div className="flex h-dvh w-full bg-background text-foreground">
       {/* Icon rail (desktop) */}
-      <aside className="hidden md:flex flex-col items-center w-14 shrink-0 border-r border-border/60 bg-sidebar py-4 gap-1">
+      <aside className="hidden md:flex flex-col items-center w-14 shrink-0 bg-sidebar py-4 gap-1">
         <div className="w-8 h-8 rounded-md bg-foreground flex items-center justify-center mb-4">
           <Sparkles size={15} className="text-accent" strokeWidth={2.2} />
         </div>
@@ -47,7 +47,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
       <div className="flex flex-1 flex-col min-w-0">
         {/* Header */}
-        <header className="flex items-center justify-between px-4 py-3 border-b border-border/60 bg-background shrink-0">
+        <header className="flex items-center justify-between px-4 py-3 bg-background shrink-0">
           <div className="flex items-center gap-2.5">
             <div className="w-7 h-7 rounded-md bg-foreground flex items-center justify-center md:hidden">
               <Sparkles size={14} className="text-accent" strokeWidth={2.2} />
@@ -63,7 +63,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           </div>
 
           {/* mobile nav */}
-          <nav className="flex md:hidden bg-sidebar rounded-lg p-0.5 border border-border/60">
+          <nav className="flex md:hidden bg-sidebar rounded-lg p-0.5">
             {NAV_ITEMS.map((item) => {
               const active = pathname?.startsWith(item.href);
               const Icon = item.icon;
@@ -73,7 +73,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                   href={item.href}
                   className={cn(
                     "flex items-center gap-1 px-2.5 py-1.5 rounded-md font-mono text-[11px] transition-colors",
-                    active ? "bg-card text-foreground shadow-sm" : "text-muted-foreground"
+                    active ? "bg-card text-foreground" : "text-muted-foreground"
                   )}
                 >
                   <Icon size={12} /> {item.label}

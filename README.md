@@ -6,21 +6,42 @@ with an LLM, and saves them to a local SQLite database via Prisma (v7, driver-ad
 
 ## What's here
 
-- **`/make-science`** — indexing pipeline (unchanged across this and the prior pass, per
-  instructions not to touch its features). Diffs your repo's article list against the local DB
-  every visit, streams progress while it fetches each PDF, reads the first page, and asks the
-  LLM for a clean title + abstract.
-- **`/chat`** — the production chat surface, restyled this pass to match claude.ai's actual
-  token values and interaction patterns (see "This pass's fixes" below).
+- **`/make-science`** — indexing pipeline (untouched across every pass, per instructions not to
+  touch its features). Diffs your repo's article list against the local DB every visit, streams
+  progress while it fetches each PDF, reads the first page, and asks the LLM for a clean title +
+  abstract.
+- **`/chat`** — the production chat surface: claude.ai-matched typography/colors, a model picker
+  (gpt-oss / Gemini), a "thinking mode" toggle, and an agent-activity timeline for reasoning +
+  tool calls.
 - **`/chat-assist-ui`** — a second, fuller chat build following assistant-ui's own
   ["Claude Clone" reference example](https://www.assistant-ui.com/examples/claude) more closely
-  (topic chips, attachment row, edit-message, thumbs up/down). Same `/api/chat` backend as
-  `/chat` — a comparison/testing surface, not a separate product.
+  (topic chips, attachment row, edit-message, thumbs up/down). Same `/api/chat` backend, same
+  model picker and agent-activity timeline as `/chat` — a comparison/testing surface, not a
+  separate product.
 - **`/library`** — the original dummy-data paper search/browse pages, untouched.
 
-Both chat pages call the same `POST /api/chat` (AI SDK v7 `streamText`), which now has **four**
-tools over the local `Article` table (not `ARTICLES_LIST_URL` — chat only ever sees what's
-actually been indexed):
+## Model picker + thinking mode
+
+Both chat pages let you switch between two models via a combobox in the composer:
+
+| id | Provider | Env vars |
+|---|---|---|
+| `gpt-oss` | Your `OPENAI_BASE_URL` (OpenAI-compatible) | `OPENAI_API_KEY`, `OPENAI_BASE_URL`, `MODEL_NAME` |
+| `gemini-flash-lite` | Google Generative AI (`@ai-sdk/google`) | `GOOGLE_GENERATIVE_AI_API_KEY`, `GEMINI_MODEL_NAME` |
+
+The selection (plus a "thinking" toggle) is sent as `{ model, thinking }` in the request body on
+every message — `src/lib/ai-provider.ts`'s `getModel(id)` resolves that to a real AI SDK
+`LanguageModel`, and `src/app/api/chat/route.ts` passes `thinking` through as
+`providerOptions.google.thinkingConfig.includeThoughts` (Gemini-only for now — the tooltip on the
+toggle says so; gpt-oss reasoning-effort wiring would need to match whatever your specific
+OpenAI-compatible endpoint expects, which isn't standardized the way Gemini's is).
+
+`src/components/assistant-ui/model-context.tsx` holds this as React state shared by both the
+picker and the transport, via a stable `getRequestBody()` ref-backed function — so switching
+models mid-session doesn't recreate the transport (and drop in-flight state) the way passing a
+changing object literal to `DefaultChatTransport({ body })` would.
+
+## Tools (over the local `Article` table, not `ARTICLES_LIST_URL`)
 
 | Tool | Needs a keyword? | Use |
 |---|---|---|
@@ -28,76 +49,64 @@ actually been indexed):
 | `listRecentArticles` | no | "what's in the library" / browse newest-first |
 | `getLibraryStats` | no | indexed/failed counts, most recent indexing activity |
 | `getArticleByUrl` | no (needs a url) | pull one article's full record after a search hit |
+| `readArticlePage` | no (needs a url + page) | read a specific PDF page — page 1 comes from the cached extraction, other pages are fetched live |
+| `webSearch` | yes | real web search via DuckDuckGo's no-JS HTML endpoint, no API key |
+| `runPythonCode` | — | **off by default** — runs model-written Python as a real subprocess, see below |
 
-## This pass's fixes
+### `runPythonCode` — read this before enabling it
 
-**F1 — chat UI/UX.** The real problem wasn't just color, it was boxiness: every tool call, every
-suggestion chip, every panel had its own bordered rectangle, which reads as visual noise
-stacked up in a transcript. Fixed:
-- Colors now come directly from the dark-mode token dump you pasted (`gray-750/800/840/900` for
-  surfacing, `gray-0/350` for text) — mapped onto this project's existing token names in
-  `src/app/globals.css` so nothing else needed to change to pick it up.
-- **`--sidebar` is now literally the same color as `--background`**, per your note — they're
-  separated by a `border-border/60`–`/70` hairline, never a fill-color difference. Applied to the
-  icon rail, header, and mobile tab switcher in `app-shell.tsx`.
-- Borders generally moved from full-opacity to `/60`–`/70` opacity across the board (composer,
-  suggestion chips, thread rail) — same hue, much quieter line, which is what "thin" actually
-  means in claude.ai's own CSS (they do this with the exact same technique, opacity modifiers on
-  a light-in-dark / dark-in-light border color, not a sub-pixel border width).
+`ENABLE_PYTHON_TOOL=true` turns on a tool that writes whatever Python the model generates to a
+temp file and runs it with `python3` as a real OS subprocess (`src/lib/python-runner.ts`). It has
+a 10s timeout and an 8000-character output cap — **that is not a security sandbox.** It runs with
+the same permissions as your Next.js server process, with filesystem and network access unless
+your OS-level setup restricts that. This is fine for a single trusted user running this locally on
+their own machine; it is not something to expose on a shared or public deployment without a real
+sandbox (a locked-down container, gVisor, a scoped user account, etc.) in front of it. Off by
+default for this reason — you have to opt in.
 
-**F4 — tool call UX.** Completely rebuilt in `src/components/assistant-ui/tool-call.tsx`:
-collapsed by default to a single ghost row (icon + short human-readable status + chevron, no box,
-just a hover highlight), expands on click to show clean key/value args and a formatted result
-list — not a raw JSON dump in a bordered rectangle. Also added
-`src/components/assistant-ui/thinking-indicator.tsx`: a small sparkle + pulsing-dots row shown
-specifically while `message.status.type === "running" && message.content.length === 0` — i.e.
-genuinely waiting on the first token/part from the API — and it disappears the instant anything
-(text or a tool call) starts streaming in. Both pieces are shared between `/chat` and
-`/chat-assist-ui`.
+## Agent-activity timeline (reasoning + tool calls)
 
-**More search tools**, per your ask for search "without keywords": `listRecentArticles` and
-`getLibraryStats` need no query at all; `getArticleByUrl` needs a url but not a keyword. The
-system prompt in `/api/chat/route.ts` now explicitly tells the model which tool fits which kind
-of question, and explicitly says to use the real tool-calling mechanism rather than writing tool
-JSON out as plain text — the garbled `{"tool": "functions.searchArticles", ...}` text you saw in
-your screenshots was the model narrating a malformed call instead of actually issuing one; a
-clearer system prompt plus `searchArticles.query` now being required-and-non-empty (so the model
-can't call it with `{}` and get zero results) should reduce that. This is a model/endpoint
-behavior question as much as a prompt one — if it persists with your specific `OPENAI_BASE_URL`
-model, it's worth checking whether that endpoint fully supports native tool-calling.
+`src/components/assistant-ui/step-flow.tsx` is the core of the "thinking & actions" UX you asked
+for. It uses assistant-ui's `groupPartByType` + `MessagePrimitive.GroupedParts` to coalesce
+adjacent reasoning/tool-call parts into one small "working" rail — a `Brain` icon, 10px uppercase
+label, then each reasoning step as a muted 12.5px italic line and each tool call as the ghost row
+from `tool-call.tsx` — visually distinct (smaller, quieter) from the actual response text, which
+renders at full size once the rail ends. This is the same technique the Claude Code transcript
+screenshots you shared use (a compact sequence of "Read X" / "Fixed Y" / "Searched Z" rows), built
+on assistant-ui's own documented pattern for it rather than something bespoke.
 
-**Branding** — renamed to **locaul science** (your explicit correction) everywhere: page title,
-`package.json` name, the internal model provider label, and this README.
+`src/components/assistant-ui/thinking-indicator.tsx` (sparkle + three pulsing dots) is wired in via
+`GroupedParts`'s built-in `indicator` slot (default mode `"no-text"`) — it shows automatically
+while the model has produced no parts yet or hasn't started a text/reasoning part, and disappears
+the instant real content streams in.
 
-**Prisma v7 driver-adapter migration** — per your note, switched to the `@prisma/adapter-better-sqlite3`
-+ `better-sqlite3` pattern:
-- `prisma/schema.prisma`: `datasource` block no longer has a `url` — that config moved to...
-- `prisma.config.ts` (new): `defineConfig({ schema, datasource: { url: process.env.DATABASE_URL } })`,
-  used by CLI commands (`db push`, `studio`, etc).
-- `src/lib/prisma.ts`: `PrismaClient` is now constructed with an explicit `adapter: new
-  PrismaBetterSqlite3({ url })` — Prisma 7 requires this; there's no more implicit
-  `DATABASE_URL`-only connection.
-- `next.config.mjs`: added `better-sqlite3` and `@prisma/adapter-better-sqlite3` to
-  `serverComponentsExternalPackages` since better-sqlite3 is a native binding, not a bundle-able
-  JS module.
+## Chat UI fixes this pass
 
-## Design reference
-
-`.agents/skills/frontend-ui-conventions/SKILL.md` — the token table, chat-specific UI patterns
-(ghost tool calls, hover-only action bars, sidebar=background), and a note on which Radix Themes
-components (Skeleton, Scroll Area, Data List, etc.) are worth reaching for later instead of
-hand-rolling. Read this before touching any page's styling.
+- **App bar**: no border/line separating it from the page — icons and buttons sit directly on
+  `bg-background`, matching claude.ai's own minimal top bar. (The icon rail and mobile tab
+  switcher got the same treatment earlier.)
+- **Typography**: chat message text is `text-base font-normal leading-normal` (1rem / 400 /
+  1.5), matching claude.ai's own `.font-claude-response-body` spec you quoted — the previous
+  1.7rem line-height and unset weight read as noticeably bigger/heavier than the real thing.
+  Centralized in `src/components/assistant-ui/markdown-text.tsx`, shared by both chat pages so
+  they can't drift out of sync again.
+- **Tool-call UX** (unchanged in *style* per your instruction, extended in *coverage*): the
+  ghost/collapsible row from the previous pass now has entries for all seven tools —
+  `readArticlePage`, `webSearch`, and `runPythonCode` previously fell through to a raw JSON dump;
+  they now get proper icons, human-readable status lines, and formatted results (web results as
+  clickable links, Python stdout/stderr in a small mono block, page text in a scrollable snippet).
 
 ## Stack
 
 - Next.js 14 (App Router) + TypeScript
 - Prisma 7 (driver adapters) + `better-sqlite3` — `Article` model (`prisma/schema.prisma`)
-- `unpdf` — extracts text from the first page of each PDF
-- Vercel AI SDK **v7** (`ai@7`, `@ai-sdk/react`, `@ai-sdk/openai-compatible`) — `streamText`,
-  `generateObject`, tool calling
+- `unpdf` — first-page extraction for indexing, arbitrary-page extraction for `readArticlePage`
+- Vercel AI SDK **v7** (`ai@7`, `@ai-sdk/react`, `@ai-sdk/openai-compatible`, `@ai-sdk/google`) —
+  `streamText`, `generateObject`, tool calling, provider switching
 - `@assistant-ui/react` + `@assistant-ui/react-ai-sdk` + `@assistant-ui/react-markdown` — chat
-  UI/UX for both `/chat` and `/chat-assist-ui`
-- Tailwind + hand-rolled shadcn/ui-style primitives (`src/components/ui/`)
+  UI/UX for both `/chat` and `/chat-assist-ui`, including the `GroupedParts` agent-activity timeline
+- Tailwind + hand-rolled shadcn/ui-style primitives (`src/components/ui/`, now including a Radix
+  `Select` for the model picker)
 
 ## One-time setup
 
@@ -114,49 +123,66 @@ npm run dev
 DATABASE_URL="file:./dev.db"
 
 # Your article/PDF repo:
-ARTICLES_LIST_URL="http://10.80.31.12:3000/articles"   # returns a JSON array of relative paths
-ARTICLES_BASE_URL="http://10.80.31.12:3000"             # prefixed to each path to fetch the PDF
+ARTICLES_LIST_URL="http://10.80.31.12:3000/articles"
+ARTICLES_BASE_URL="http://10.80.31.12:3000"
 
-# LLM — any OpenAI-compatible endpoint (OpenAI itself, Groq, a local vLLM/Ollama server, etc.)
+# Primary LLM (OpenAI-compatible) — also used by /make-science's extraction step
 OPENAI_API_KEY="sk-..."
 OPENAI_BASE_URL="https://api.openai.com/v1"
-MODEL_NAME="gpt-4o-mini"
+MODEL_NAME="gpt-oss-120b"
+
+# Second model option
+GOOGLE_GENERATIVE_AI_API_KEY="AIza..."
+GEMINI_MODEL_NAME="gemini-3.1-flash-lite"
+
+# Optional, off by default — see the runPythonCode section above before enabling
+ENABLE_PYTHON_TOOL="false"
 ```
 
 > **Note on this build:** the sandbox I worked in blocks `binaries.prisma.sh` (Prisma's
-> schema-engine download — needed even with the driver-adapter pattern, since `prisma generate`
-> still validates the schema through it), `fonts.googleapis.com`, `r.assistant-ui.com`, and your
-> private `10.80.31.12` repo. I could not run `prisma generate`, `npx prisma db push`, or the
-> real indexing loop here. Everything else typechecks cleanly (`npx tsc --noEmit` — down to
-> exactly one error, the un-generated `PrismaClient` export, which is the direct and only
-> consequence of the blocked download) and `npm run build` gets through webpack compilation and
-> font handling fine — it stops at that same single Prisma step. Once you run `npx prisma db
-> push` locally with real network access, that error resolves and the rest of the build proceeds
-> — nothing else in this pass depends on network access this sandbox doesn't have.
+> schema-engine download), `fonts.googleapis.com`, `html.duckduckgo.com` (so `webSearch` is
+> written against DuckDuckGo's real HTML but never actually exercised here), and your private
+> `10.80.31.12` repo. I could not run `prisma generate`/`db push`, fetch a live search result, or
+> run the real indexing loop here. Everything else typechecks cleanly (`npx tsc --noEmit` — down
+> to exactly one error, the un-generated `PrismaClient` export) and `npm run build` gets through
+> webpack compilation and font handling fine, stopping at that same single Prisma step. Once you
+> run `npx prisma db push` locally with real network access, that resolves and the rest proceeds.
+>
+> One thing worth testing on your end specifically: DuckDuckGo's no-JS HTML endpoint is unofficial
+> and its markup could change or rate-limit without warning — if `webSearch` starts returning zero
+> results consistently, that's the first thing to check (it degrades to an empty result set rather
+> than crashing, so the model will just say it found nothing).
 
 ## Project structure
 
 ```
-prisma/schema.prisma          Article model (SQLite, v7 driver-adapter — no url in datasource)
+prisma/schema.prisma          Article model (SQLite, v7 driver-adapter)
 prisma.config.ts               CLI-only datasource URL (Prisma 7 pattern)
 src/lib/
   prisma.ts                    PrismaClient + PrismaBetterSqlite3 adapter
-  pdf.ts                       first-page text extraction (unpdf)
-  ai-provider.ts                shared OpenAI-compatible model from env
+  pdf.ts                       first-page extraction (indexing) + arbitrary-page extraction (chat tool)
+  ai-provider.ts                model registry + getModel(id) provider switch
+  web-search.ts                 DuckDuckGo HTML-endpoint search, no API key
+  python-runner.ts               opt-in subprocess Python execution
   articles-source.ts             fetch repo list + build PDF URLs (make-science only)
 src/app/
   api/articles/pending/route.ts   GET  — diff repo list vs DB
   api/articles/index/route.ts      POST — streaming indexing loop
-  api/chat/route.ts                POST — streamText + 4 tools over the Article table
+  api/chat/route.ts                POST — streamText + 7 tools, model switch, thinking mode
   make-science/page.tsx             indexing UX (unchanged)
-  chat/page.tsx                     production chat page
-  chat-assist-ui/page.tsx            assistant-ui reference/testing chat page
+  chat/page.tsx                     production chat page (ModelProvider-wrapped)
+  chat-assist-ui/page.tsx            assistant-ui reference/testing chat page (same wiring)
   library/, library/[id]/            existing dummy-data library (unchanged)
 src/components/
   assistant-ui/thread.tsx           /chat's Thread
   assistant-ui/thread-assist-ui.tsx  /chat-assist-ui's Thread
-  assistant-ui/tool-call.tsx          shared ghost/collapsible tool-call UI
-  assistant-ui/thinking-indicator.tsx  shared "waiting for first token" indicator
+  assistant-ui/markdown-text.tsx      shared markdown renderer (font fix lives here)
+  assistant-ui/step-flow.tsx           agent-activity timeline (GroupedParts)
+  assistant-ui/tool-call.tsx            ghost/collapsible tool-call row, all 7 tools
+  assistant-ui/thinking-indicator.tsx    "waiting for first token" dots
+  assistant-ui/model-context.tsx         shared model/thinking selection state
+  assistant-ui/model-picker.tsx           the combobox + thinking toggle
+  ui/select.tsx                          Radix Select primitive (shadcn-style)
   app-shell.tsx                     nav: Chat / Chat (assistant-ui) / Library / Index
 .agents/skills/frontend-ui-conventions/SKILL.md   design tokens + patterns reference
 ```
@@ -164,12 +190,12 @@ src/components/
 ## Migrating this MVP to production-grade
 
 1. **Auth.** Nothing is gated right now.
-2. **Postgres over SQLite** once there's more than one concurrent writer — the driver-adapter
-   pattern in `src/lib/prisma.ts` makes this a matter of swapping `@prisma/adapter-better-sqlite3`
-   for `@prisma/adapter-pg` (or similar) plus the `datasource` provider, not a rewrite.
-3. **Background indexing worker**, not a manual button on `/make-science`.
-4. **Semantic search** — `searchArticles` is still plain SQL `contains`, per your instruction to
-   skip Qdrant for now. The tool's interface (query in, ranked results out) doesn't need to
-   change when you swap the implementation.
-5. **Rate limiting + cost controls** on `/api/chat` and `/api/articles/index`.
-6. **CI-driven `prisma generate`**, not relying on `postinstall` alone.
+2. **`runPythonCode` needs a real sandbox** before this goes anywhere multi-tenant — see the
+   section above. Don't skip this one.
+3. **Postgres over SQLite** once there's more than one concurrent writer — the driver-adapter
+   pattern makes this a provider/connection-string swap, not a rewrite.
+4. **Background indexing worker**, not a manual button on `/make-science`.
+5. **Semantic search** — `searchArticles` is still plain SQL `contains`.
+6. **Rate limiting + cost controls** on `/api/chat` and `/api/articles/index` — doubly true now
+   that `/api/chat` can also hit a real web search and spin up subprocesses.
+7. **CI-driven `prisma generate`**, not relying on `postinstall` alone.

@@ -20,8 +20,6 @@ import {
   ThreadPrimitive,
   useAuiState,
 } from "@assistant-ui/react";
-import { MarkdownTextPrimitive } from "@assistant-ui/react-markdown";
-import remarkGfm from "remark-gfm";
 import {
   ArrowUp,
   Check,
@@ -37,12 +35,9 @@ import {
   ThumbsUp,
   X,
 } from "lucide-react";
-import { ToolFallback } from "@/components/assistant-ui/tool-call";
-import { ThinkingIndicator } from "@/components/assistant-ui/thinking-indicator";
-
-const MarkdownText = () => (
-  <MarkdownTextPrimitive remarkPlugins={[remarkGfm]} className="chat-markdown" />
-);
+import { MarkdownText } from "@/components/assistant-ui/markdown-text";
+import { StepFlowParts } from "@/components/assistant-ui/step-flow";
+import { ModelPicker } from "@/components/assistant-ui/model-picker";
 
 const actionButton =
   "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground";
@@ -98,8 +93,9 @@ const Composer = () => {
         >
           <Plus className="size-4" />
         </ComposerPrimitive.AddAttachment>
-        <span className="font-mono text-[11px] text-muted-foreground">
-          {useModelLabel()}
+        <ModelPicker />
+        <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
+          same local library as /chat
         </span>
         <div className="ml-auto flex items-center gap-1">
           <ComposerPrimaryAction />
@@ -115,17 +111,6 @@ const Composer = () => {
     </ComposerPrimitive.Root>
   );
 };
-
-function useModelLabel() {
-  const [label, setLabel] = useState("checking model…");
-  useEffect(() => {
-    fetch("/api/chat")
-      .then((r) => r.json())
-      .then((d) => setLabel(d.model ?? "unknown model"))
-      .catch(() => setLabel("model unavailable"));
-  }, []);
-  return label;
-}
 
 const ComposerPrimaryAction = () => {
   return (
@@ -197,13 +182,8 @@ const ChatMessage = () => {
 
       <AuiIf condition={(s) => s.message.role === "assistant"}>
         <div className="flex flex-col">
-          <AuiIf condition={(s) => s.message.status?.type === "running" && s.message.content.length === 0}>
-            <ThinkingIndicator />
-          </AuiIf>
-          <div className="font-serif text-base leading-[1.7rem] text-foreground chat-markdown-wrap">
-            <MessagePrimitive.Parts
-              components={{ Text: MarkdownText, tools: { Fallback: ToolFallback } }}
-            />
+          <div className="font-serif font-normal text-foreground chat-markdown-wrap">
+            <StepFlowParts />
           </div>
           <ActionBarPrimitive.Root className="mt-2 flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">
             <ActionBarPrimitive.Copy className={actionButton}>
