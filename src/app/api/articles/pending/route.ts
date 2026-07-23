@@ -1,10 +1,14 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { fetchArticleList, ArticlesSourceError } from "@/lib/articles-source";
+import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 
-export async function GET() {
+export async function GET(req: Request) {
+  const auth = await getAuthFromRequest(req);
+  if (!auth) return unauthorized();
+
   try {
     const allUrls = await fetchArticleList();
     const existing = await prisma.article.findMany({

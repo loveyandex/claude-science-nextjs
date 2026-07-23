@@ -1,12 +1,12 @@
-import { defineConfig } from "prisma/config";
+import "dotenv/config"; // 👈 Crucial to load your .env file
+import { defineConfig, env } from "prisma/config"; // 👈 Prisma 7 helper imports
 
-// Prisma 7 moved the datasource URL out of schema.prisma and into this
-// config file for CLI commands (db push, migrate, studio). The Prisma
-// Client itself is instantiated with the better-sqlite3 driver adapter in
-// src/lib/prisma.ts — this file only affects `prisma` CLI invocations.
 export default defineConfig({
   schema: "prisma/schema.prisma",
+  migrations: {
+    path: "prisma/migrations",
+  },
   datasource: {
-    url: process.env.DATABASE_URL,
+    url: env("POSTGRES_URL"), // 👈 Safely reads from your environment variables
   },
 });

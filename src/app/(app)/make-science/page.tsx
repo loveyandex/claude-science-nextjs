@@ -13,6 +13,7 @@ import {
   Database,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/components/auth/auth-context";
 
 type PendingInfo = {
   total: number;
@@ -28,6 +29,7 @@ type FeedItem =
   | { kind: "stopped"; reason: string };
 
 export default function MakeSciencePage() {
+  const { authFetch } = useAuth();
   const [info, setInfo] = useState<PendingInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [loadingInfo, setLoadingInfo] = useState(true);
@@ -46,7 +48,7 @@ export default function MakeSciencePage() {
     setLoadingInfo(true);
     setInfoError(null);
     try {
-      const res = await fetch("/api/articles/pending", { cache: "no-store" });
+      const res = await authFetch("/api/articles/pending", { cache: "no-store" });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || "Failed to check repo");
       setInfo(data);
@@ -75,7 +77,7 @@ export default function MakeSciencePage() {
     setCurrentUrl(null);
 
     try {
-      const res = await fetch("/api/articles/index", {
+      const res = await authFetch("/api/articles/index", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ limit: batchSize }),

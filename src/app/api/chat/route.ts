@@ -5,6 +5,7 @@ import { prisma } from "@/lib/prisma";
 import { extractPageText } from "@/lib/pdf";
 import { webSearch } from "@/lib/web-search";
 import { runPythonCode } from "@/lib/python-runner";
+import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -51,12 +52,27 @@ where the claim came from. If nothing relevant is found anywhere, say so plainly
 making something up.`;
 
 export async function POST(req: Request) {
+  const auth = await getAuthFromRequest(req);
+  if (!auth) return unauthorized();
+
   const body = await req.json();
-  const { messages, model: modelId, thinking }: {
+  const { messages, model: modelId, thinking, chatId }: {
     messages: UIMessage[];
     model?: ModelId;
     thinking?: boolean;
+    chatId: string;
   } = body;
+
+  if (!chatId) {
+    return Response.json({ error: "chatId is required." }, { status: 400 });
+  }
+
+  // Ownership check — a chatId that exists but belongs to someone else
+  // should look identical to one that doesn't exist at all.
+  const chat = await prisma.chat.findUnique({ where: { id: chatId }, select: { userId: true } });
+  if (!chat || chat.userId !== auth.sub) {
+    return Response.json({ error: "Chat not found." }, { status: 404 });
+  }
 
   const modelMessages = await convertToModelMessages(messages);
   const model = getModel(modelId);
@@ -256,7 +272,39 @@ export async function POST(req: Request) {
     },
   });
 
-  return result.toUIMessageStreamResponse();
+  return result.toUIMessageStreamResponse({
+    originalMessages: messages,
+    onEnd: async ({ messages: updatedMessages }) => {
+      // Additive persistence, not a change to the model/tool logic above:
+      // save the full conversation (parts and all — reasoning, tool
+      // calls, text) so a page reload can replay the same timeline.
+      const firstUserText = extractFirstUserText(updatedMessages);
+      await prisma.chat.update({
+        where: { id: chatId },
+        data: {
+          // Prisma's generated Json input type isn't visible in this sandbox
+          // (client isn't generated here — see README); UIMessage[] is
+          // plain JSON-serializable data, so this cast should resolve
+          // cleanly against the real generated types. Worth a quick check
+          // once you run `prisma generate` locally.
+          messages: updatedMessages as unknown as object,
+          model: modelId ?? undefined,
+          thinking: thinking ?? undefined,
+          // First user message never changes turn-to-turn, so recomputing
+          // this every save is idempotent, not title drift.
+          ...(firstUserText ? { title: firstUserText.slice(0, 80) } : {}),
+        },
+      });
+    },
+  });
+}
+
+/** Pulls the text of the first user message, used to derive the chat's title. */
+function extractFirstUserText(messages: UIMessage[]): string | null {
+  const first = messages.find((m) => m.role === "user");
+  if (!first) return null;
+  const textPart = first.parts?.find((p): p is { type: "text"; text: string } => p.type === "text");
+  return textPart?.text?.trim() || null;
 }
 
 export async function GET() {

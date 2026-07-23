@@ -38,10 +38,19 @@ type ModelContextValue = {
 
 const ModelContext = createContext<ModelContextValue | null>(null);
 
-export function ModelProvider({ children }: { children: ReactNode }) {
+export function ModelProvider({
+  children,
+  initialModel,
+  initialThinking,
+}: {
+  children: ReactNode;
+  /** Seed from a persisted chat's saved model/thinking when resuming one. */
+  initialModel?: string;
+  initialThinking?: boolean;
+}) {
   const [models, setModels] = useState<ModelOption[]>(FALLBACK_MODELS);
-  const [model, setModel] = useState<string>(FALLBACK_MODELS[0].id);
-  const [thinking, setThinking] = useState(false);
+  const [model, setModel] = useState<string>(initialModel || FALLBACK_MODELS[0].id);
+  const [thinking, setThinking] = useState(initialThinking ?? false);
 
   const latest = useRef({ model, thinking });
   useEffect(() => {

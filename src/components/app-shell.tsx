@@ -2,20 +2,42 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, MessageSquare, Library, Database, Bot } from "lucide-react";
+import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { STAT_PAPERS_INDEXED } from "@/lib/data";
 import { cn } from "@/lib/utils";
+import { useAuth } from "@/components/auth/auth-context";
 
 const NAV_ITEMS = [
-  { href: "/chat", label: "Chat", icon: MessageSquare },
-  { href: "/chat-assist-ui", label: "Chat (assistant-ui)", icon: Bot },
-  { href: "/library", label: "Library", icon: Library },
-  { href: "/make-science", label: "Index", icon: Database },
+  {
+    href: "/chat",
+    label: "Chat",
+    icon: MessageSquare,
+    isActive: (p: string) => p === "/chat" || p.startsWith("/c/"),
+  },
+  {
+    href: "/chat-assist-ui",
+    label: "Chat (assistant-ui)",
+    icon: Bot,
+    isActive: (p: string) => p === "/chat-assist-ui" || p.startsWith("/c-assist-ui/"),
+  },
+  {
+    href: "/library",
+    label: "Library",
+    icon: Library,
+    isActive: (p: string) => p.startsWith("/library"),
+  },
+  {
+    href: "/make-science",
+    label: "Index",
+    icon: Database,
+    isActive: (p: string) => p.startsWith("/make-science"),
+  },
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
-  const pathname = usePathname();
+  const pathname = usePathname() || "";
+  const { user, logout } = useAuth();
 
   return (
     <div className="flex h-dvh w-full bg-background text-foreground">
@@ -25,7 +47,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           <Sparkles size={15} className="text-accent" strokeWidth={2.2} />
         </div>
         {NAV_ITEMS.map((item) => {
-          const active = pathname?.startsWith(item.href);
+          const active = item.isActive(pathname);
           const Icon = item.icon;
           return (
             <Link
@@ -43,6 +65,28 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </Link>
           );
         })}
+
+        <div className="flex-1" />
+
+        <Link
+          href="/recent"
+          title="Recent chats"
+          className={cn(
+            "w-10 h-10 rounded-md flex items-center justify-center transition-colors",
+            pathname.startsWith("/recent")
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:bg-border/50 hover:text-foreground"
+          )}
+        >
+          <Search size={17} />
+        </Link>
+        <button
+          onClick={logout}
+          title="Log out"
+          className="w-10 h-10 rounded-md flex items-center justify-center text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
+        >
+          <LogOut size={16} />
+        </button>
       </aside>
 
       <div className="flex flex-1 flex-col min-w-0">
@@ -65,7 +109,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
           {/* mobile nav */}
           <nav className="flex md:hidden bg-sidebar rounded-lg p-0.5">
             {NAV_ITEMS.map((item) => {
-              const active = pathname?.startsWith(item.href);
+              const active = item.isActive(pathname);
               const Icon = item.icon;
               return (
                 <Link
@@ -80,13 +124,29 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 </Link>
               );
             })}
+            <Link
+              href="/recent"
+              className={cn(
+                "flex items-center gap-1 px-2.5 py-1.5 rounded-md font-mono text-[11px] transition-colors",
+                pathname.startsWith("/recent") ? "bg-card text-foreground" : "text-muted-foreground"
+              )}
+            >
+              <Search size={12} />
+            </Link>
           </nav>
 
           <div className="flex items-center gap-4">
             <div className="hidden md:flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
               <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-              indexed &amp; grounded locally
+              {user?.email ?? "indexed & grounded locally"}
             </div>
+            <button
+              onClick={logout}
+              className="md:hidden text-muted-foreground hover:text-destructive transition-colors"
+              title="Log out"
+            >
+              <LogOut size={15} />
+            </button>
             <ThemeToggle />
           </div>
         </header>

@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { model } from "@/lib/ai-provider";
 import { extractFirstPageText } from "@/lib/pdf";
 import { fetchArticleList, buildPdfUrl, ArticlesSourceError } from "@/lib/articles-source";
+import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -40,6 +41,9 @@ function encodeEvent(ev: Event) {
 }
 
 export async function POST(req: Request) {
+  const auth = await getAuthFromRequest(req);
+  if (!auth) return unauthorized();
+
   let limit = DEFAULT_BATCH_LIMIT;
   try {
     const body = await req.json().catch(() => ({}));

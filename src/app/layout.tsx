@@ -1,13 +1,17 @@
 import type { Metadata } from "next";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
-import { AppShell } from "@/components/app-shell";
+import { AuthProvider } from "@/components/auth/auth-context";
 
 export const metadata: Metadata = {
   title: "locaul science",
   description: "Chat with an LLM grounded in your own locally-indexed paper library.",
 };
 
+// Root layout is shared by every route, including (auth)'s bare login/signup
+// pages — so it only holds truly global concerns (fonts, theme, auth state).
+// The app chrome (sidebar/header) and the RequireAuth gate live in
+// (app)/layout.tsx instead, so login/signup can render without either.
 export default function RootLayout({
   children,
 }: {
@@ -25,7 +29,7 @@ export default function RootLayout({
       </head>
       <body className="font-body">
         <ThemeProvider attribute="class" defaultTheme="light" enableSystem={false}>
-          <AppShell>{children}</AppShell>
+          <AuthProvider>{children}</AuthProvider>
         </ThemeProvider>
       </body>
     </html>
