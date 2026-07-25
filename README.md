@@ -5,6 +5,43 @@ indexed paper library, with full chat persistence (resume any conversation, reas
 calls included, from its own URL), plus the indexing pipeline that builds that library from real
 PDFs. Postgres + Prisma 7 (driver adapters) throughout.
 
+## Bugfixes this pass (found by actually running the app — see note below)
+
+Three real bugs from the previous pass, all confirmed against a live `npm run build` /
+running app, not just my own typecheck:
+
+1. **Old project files left over from before the route-group restructuring** caused
+   `You cannot have two parallel pages that resolve to the same path` — not a bug in the zip
+   itself, but worth a permanent note: **always extract into a clean directory**, don't unzip on
+   top of a previous version of this project.
+2. **`useSearchParams()` in `(auth)/layout.tsx` without a Suspense boundary** — Next.js requires
+   this for any prerendered page using that hook; without it, `next build` fails at the static
+   page generation step (`/login`, `/signup`). Fixed by splitting the redirect logic into its own
+   `<Suspense>`-wrapped component.
+3. **Chat history collapsing to just the last message pair after a page reload** — the real one.
+   Root cause: some assistant messages come back from the AI SDK's `onEnd` callback with
+   `id: ""` under certain multi-step tool-calling turns. Confirmed against
+   `@assistant-ui/react-ai-sdk`'s actual source that `message.id` is used as the key in
+   assistant-ui's internal message store — duplicate/empty ids silently collapse to whichever
+   message with that id was processed last, which is exactly the symptom (DB had the full
+   history; the UI only ever showed the latest pair). Fixed at the root in
+   `src/lib/message-ids.ts`'s `ensureMessageIds()`, applied both when *saving* (prevents new
+   corruption) and when *loading* a chat (self-heals chats that were already saved with the bug —
+   no manual DB fix needed for existing conversations).
+
+> **Why my own testing didn't catch #2 and #3:** my sandbox can never get `next build` past the
+> Prisma type-check step (see the note further down) — which happens *before* static page
+> generation and before the app ever runs against a real database. That means I have never once
+> been able to observe this app actually serving a page or handling a real chat turn myself; only
+> `tsc --noEmit` and how far `next build` gets before that one expected failure. Both of these
+> bugs live entirely past that point. I don't have a way around this limitation in this
+> environment — flagging it plainly rather than implying a confidence level I don't have.
+
+Also adopted two small quality-of-life fixes: `optimizeFonts: false` in `next.config.mjs` (avoids
+a noisy but harmless font-download warning during build when Google Fonts isn't reachable), and
+`prisma.config.ts` now uses `dotenv/config` + the `env()` helper (throws a clear error if
+`POSTGRES_URL` is missing, instead of silently passing `undefined` through to the connection).
+
 ## What's new this pass
 
 ### Postgres migration
@@ -132,10 +169,12 @@ ENABLE_PYTHON_TOOL="false"
 > `DefaultChatTransport`'s function-valued `body`/`headers`) was checked against the actual
 > installed package's `.d.ts` files, not assumed from memory.
 >
-> Given that, the auth flow (signup → login → token → gated pages → persisted chat → reload
-> resumes it) is the one thing I'd most want you to run through end to end first — it's the
-> newest, most interconnected piece, and the part I have the least direct confidence in without
-> being able to click through it myself.
+> Given that, you've now actually run the auth → gated pages → persisted chat → reload flow
+> end to end (thank you for that — see the bugfixes section above) and found two real bugs I
+> couldn't have caught myself. If anything else surfaces, the message-id issue in particular is
+> the kind of thing that's easy to miss variants of — if a chat still looks wrong after reload
+> post-fix, checking `/api/chats/[chatId]` directly (like you did) to see the raw persisted JSON
+> is the fastest way to tell whether it's a save-side or a render-side problem.
 
 ## Project structure (this pass's additions)
 
@@ -143,6 +182,7 @@ ENABLE_PYTHON_TOOL="false"
 prisma/schema.prisma          + User, Chat models (Article unchanged)
 src/lib/
   auth.ts                       JWT + password hashing + Bearer-header verification
+  message-ids.ts                 backfills empty/duplicate message ids (see bugfix #3 above)
   prisma.ts                     now uses PrismaPg adapter
 src/app/
   (auth)/login, (auth)/signup     bare auth pages, layout redirects away if already logged in

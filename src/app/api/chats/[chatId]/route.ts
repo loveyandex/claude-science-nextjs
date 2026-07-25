@@ -1,6 +1,8 @@
 import { z } from "zod";
+import type { UIMessage } from "ai";
 import { prisma } from "@/lib/prisma";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
+import { ensureMessageIds } from "@/lib/message-ids";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +19,11 @@ export async function GET(req: Request, { params }: { params: { chatId: string }
   const chat = await loadOwnedChat(params.chatId, auth.sub);
   if (!chat) return Response.json({ error: "Chat not found." }, { status: 404 });
 
-  return Response.json({ chat });
+  // Self-heals chats saved before ensureMessageIds existed in /api/chat's
+  // onEnd — see src/lib/message-ids.ts for why this matters.
+  const messages = ensureMessageIds((chat.messages as unknown as UIMessage[]) ?? []);
+
+  return Response.json({ chat: { ...chat, messages } });
 }
 
 const patchSchema = z.object({

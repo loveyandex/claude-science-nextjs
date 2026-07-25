@@ -6,6 +6,7 @@ import { extractPageText } from "@/lib/pdf";
 import { webSearch } from "@/lib/web-search";
 import { runPythonCode } from "@/lib/python-runner";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
+import { ensureMessageIds } from "@/lib/message-ids";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 60;
@@ -274,10 +275,18 @@ export async function POST(req: Request) {
 
   return result.toUIMessageStreamResponse({
     originalMessages: messages,
-    onEnd: async ({ messages: updatedMessages }) => {
+    onEnd: async ({ messages: rawUpdatedMessages }) => {
       // Additive persistence, not a change to the model/tool logic above:
       // save the full conversation (parts and all — reasoning, tool
       // calls, text) so a page reload can replay the same timeline.
+      //
+      // ensureMessageIds guards against a real, observed issue: some
+      // assistant messages come back from onEnd with `id: ""` under
+      // certain multi-step tool-calling turns, and assistant-ui's runtime
+      // uses message.id as an internal store key — duplicate/empty ids
+      // silently collapse to just the last message sharing that id, which
+      // is exactly the "only the latest message shows after reload" bug.
+      const updatedMessages = ensureMessageIds(rawUpdatedMessages);
       const firstUserText = extractFirstUserText(updatedMessages);
       await prisma.chat.update({
         where: { id: chatId },
