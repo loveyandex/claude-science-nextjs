@@ -10,6 +10,7 @@
  */
 
 import { useEffect, useRef, useState } from "react";
+import Link from "next/link";
 import {
   Loader2,
   CheckCircle2,
@@ -20,6 +21,7 @@ import {
   RefreshCcw,
   ExternalLink,
   Ban,
+  KeyRound,
   type LucideIcon,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -46,26 +48,34 @@ type FeedItem =
   | { kind: "fetch_error"; url: string; status: number; statusText: string }
   | { kind: "stopped"; reason: string };
 
+type ConcurrencyInfo = {
+  enabledKeyCount: number;
+  concurrencyMode: "pages_per_pdf" | "pdfs_per_key";
+};
+
 export function IndexingPanel({
   icon: Icon,
   heading,
   description,
   pendingEndpoint,
   indexEndpoint,
+  showConcurrencyInfo,
 }: {
   icon: LucideIcon;
   heading: string;
   description: string;
   pendingEndpoint: string;
   indexEndpoint: string;
+  /** Only meaningful for make-science-gemma4 — the old pipeline has no key pool. */
+  showConcurrencyInfo?: boolean;
 }) {
   const { authFetch } = useAuth();
   const [info, setInfo] = useState<PendingInfo | null>(null);
   const [infoError, setInfoError] = useState<string | null>(null);
   const [loadingInfo, setLoadingInfo] = useState(true);
+  const [concurrencyInfo, setConcurrencyInfo] = useState<ConcurrencyInfo | null>(null);
 
   const [running, setRunning] = useState(false);
-  const [currentUrl, setCurrentUrl] = useState<string | null>(null);
   const [feed, setFeed] = useState<FeedItem[]>([]);
   const [batchTotal, setBatchTotal] = useState(0);
   const [batchDone, setBatchDone] = useState(0);
@@ -73,13 +83,14 @@ export function IndexingPanel({
   const [rateLimited, setRateLimited] = useState<string | null>(null);
   const [fatalError, setFatalError] = useState<string | null>(null);
   const [batchSize, setBatchSize] = useState(20);
-  // Pages seen so far for whichever article is currently being processed —
-  // reset every "start" event. Populated live as "page_done" events arrive
-  // (from resumed-from-a-previous-run pages and from the poll loop the
-  // orchestrator runs while waiting on the backend), so a slow multi-page
-  // PDF doesn't look stalled even though the batch-level progress bar
-  // only advances once per whole article.
-  const [currentPages, setCurrentPages] = useState<Set<number>>(new Set());
+  // Articles currently in flight (usually one, but "pdfs_per_key" mode can
+  // have several at once — one per available key), each mapped to the set
+  // of page numbers seen so far. Populated live as "page_done" events
+  // arrive (from resumed-from-a-previous-run pages and from the poll loop
+  // the orchestrator runs while waiting on the backend), so a slow
+  // multi-page PDF doesn't look stalled even though the batch-level
+  // progress bar only advances once per whole article.
+  const [activeArticles, setActiveArticles] = useState<Map<string, Set<number>>>(new Map());
   const feedEndRef = useRef<HTMLDivElement>(null);
 
   const loadPending = async () => {
@@ -103,8 +114,26 @@ export function IndexingPanel({
   }, [pendingEndpoint]);
 
   useEffect(() => {
+    if (!showConcurrencyInfo) return;
+    (async () => {
+      try {
+        const res = await authFetch("/api/settings/gemma4", { cache: "no-store" });
+        const json = await res.json();
+        if (!res.ok) return;
+        const enabledKeyCount = Array.isArray(json.keys)
+          ? json.keys.filter((k: { enabled: boolean }) => k.enabled).length
+          : 0;
+        setConcurrencyInfo({ enabledKeyCount, concurrencyMode: json.concurrencyMode });
+      } catch {
+        // non-critical info line — ignore failures
+      }
+    })();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showConcurrencyInfo]);
+
+  useEffect(() => {
     feedEndRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [feed, currentUrl]);
+  }, [feed, activeArticles]);
 
   const startIndexing = async () => {
     setRunning(true);
@@ -114,8 +143,7 @@ export function IndexingPanel({
     setFatalError(null);
     setBatchDone(0);
     setBatchTotal(0);
-    setCurrentUrl(null);
-    setCurrentPages(new Set());
+    setActiveArticles(new Map());
 
     try {
       const res = await authFetch(indexEndpoint, {
@@ -144,11 +172,20 @@ export function IndexingPanel({
               setBatchTotal(Math.min(ev.pendingCount, batchSize));
               break;
             case "start":
-              setCurrentUrl(ev.url);
-              setCurrentPages(new Set());
+              setActiveArticles((prev) => {
+                const next = new Map(prev);
+                next.set(ev.url, new Set());
+                return next;
+              });
               break;
             case "page_done":
-              setCurrentPages((prev) => new Set(prev).add(ev.page));
+              setActiveArticles((prev) => {
+                const next = new Map(prev);
+                const pages = new Set(next.get(ev.url) ?? []);
+                pages.add(ev.page);
+                next.set(ev.url, pages);
+                return next;
+              });
               break;
             case "success":
               setFeed((prev) => [
@@ -164,6 +201,11 @@ export function IndexingPanel({
                 },
               ]);
               setBatchDone((n) => n + 1);
+              setActiveArticles((prev) => {
+                const next = new Map(prev);
+                next.delete(ev.url);
+                return next;
+              });
               break;
             case "rate_limited":
               setRateLimited(ev.message);
@@ -171,6 +213,11 @@ export function IndexingPanel({
             case "llm_error":
               setFeed((prev) => [...prev, { kind: "llm_error", url: ev.url, message: ev.message }]);
               setBatchDone((n) => n + 1);
+              setActiveArticles((prev) => {
+                const next = new Map(prev);
+                next.delete(ev.url);
+                return next;
+              });
               break;
             case "fetch_error":
               setFeed((prev) => [
@@ -186,7 +233,7 @@ export function IndexingPanel({
               setFatalError(ev.message);
               break;
             case "done":
-              setCurrentUrl(null);
+              setActiveArticles(new Map());
               break;
           }
         }
@@ -195,7 +242,7 @@ export function IndexingPanel({
       setFatalError(err instanceof Error ? err.message : "Indexing stream failed");
     } finally {
       setRunning(false);
-      setCurrentUrl(null);
+      setActiveArticles(new Map());
       loadPending();
     }
   };
@@ -209,7 +256,26 @@ export function IndexingPanel({
           <Icon size={16} className="text-accent" />
           <h1 className="font-display font-semibold text-[18px]">{heading}</h1>
         </div>
-        <p className="font-mono text-[11px] text-muted-foreground mb-6">{description}</p>
+        <p className="font-mono text-[11px] text-muted-foreground mb-3">{description}</p>
+
+        {showConcurrencyInfo && (
+          <div className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground mb-6">
+            <KeyRound size={12} />
+            {concurrencyInfo ? (
+              <span>
+                {concurrencyInfo.enabledKeyCount} key{concurrencyInfo.enabledKeyCount === 1 ? "" : "s"} enabled ·{" "}
+                {concurrencyInfo.concurrencyMode === "pdfs_per_key"
+                  ? "one key per PDF, concurrent PDFs"
+                  : "all keys on one PDF at a time"}
+              </span>
+            ) : (
+              <span>loading key pool…</span>
+            )}
+            <Link href="/settings" className="text-accent hover:underline">
+              change
+            </Link>
+          </div>
+        )}
 
         {/* Repo status */}
         <div className="grid grid-cols-3 gap-3 mb-6">
@@ -275,13 +341,17 @@ export function IndexingPanel({
                 style={{ width: `${pct}%` }}
               />
             </div>
-            {currentUrl && (
-              <p className="font-mono text-[10px] text-muted-foreground mt-1.5 truncate">
-                reading: {decodeURIComponent(currentUrl)}
-                {currentPages.size > 0
-                  ? ` — ${currentPages.size} page${currentPages.size === 1 ? "" : "s"} transcribed so far`
-                  : ""}
-              </p>
+            {activeArticles.size > 0 && (
+              <div className="mt-1.5 space-y-0.5">
+                {Array.from(activeArticles.entries()).map(([url, pages]) => (
+                  <p key={url} className="font-mono text-[10px] text-muted-foreground truncate">
+                    reading: {decodeURIComponent(url)}
+                    {pages.size > 0
+                      ? ` — ${pages.size} page${pages.size === 1 ? "" : "s"} transcribed so far`
+                      : ""}
+                  </p>
+                ))}
+              </div>
             )}
           </div>
         )}

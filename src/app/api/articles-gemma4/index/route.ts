@@ -4,6 +4,7 @@ import { prisma } from "@/lib/prisma";
 import { model } from "@/lib/ai-provider";
 import { fetchArticleList, buildPdfUrl } from "@/lib/articles-source";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
+import { getEnabledKeyValues, getConcurrencyMode } from "@/lib/gemma4-settings";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -39,13 +40,9 @@ type BackendPage = {
   ok: true;
   pageCount: number;
   failedPages: { page: number; error: string }[];
+  allKeysRateLimited: boolean;
 };
-type BackendFailure = {
-  ok: false;
-  error: string;
-  rateLimited?: boolean;
-  pagesDone?: number;
-};
+type BackendFailure = { ok: false; error: string };
 type BackendOutcome =
   | BackendPage
   | BackendFailure
@@ -54,7 +51,7 @@ type BackendOutcome =
 
 type Event =
   | { type: "list_fetched"; total: number; pendingCount: number }
-  | { type: "start"; url: string; index: number; total: number }
+  | { type: "start"; url: string }
   | { type: "page_done"; url: string; page: number }
   | {
       type: "success";
@@ -79,6 +76,8 @@ function encodeEvent(ev: Event) {
 function delay(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
+
+type ArticleResult = "success" | "llm_error" | "stop";
 
 export async function POST(req: Request) {
   const auth = await getAuthFromRequest(req);
@@ -105,6 +104,17 @@ export async function POST(req: Request) {
     async start(controller) {
       const send = (ev: Event) => controller.enqueue(encodeEvent(ev));
 
+      const keys = await getEnabledKeyValues();
+      if (keys.length === 0) {
+        send({
+          type: "fatal",
+          message: "No Cerebras API keys are configured — add one at /settings before indexing.",
+        });
+        controller.close();
+        return;
+      }
+      const concurrencyMode = await getConcurrencyMode();
+
       let allUrls: string[];
       try {
         allUrls = await fetchArticleList();
@@ -126,11 +136,15 @@ export async function POST(req: Request) {
 
       const batch = pending.slice(0, limit);
       let processed = 0;
+      let stopRequested = false;
 
-      for (let i = 0; i < batch.length; i++) {
-        const url = batch[i];
-        send({ type: "start", url, index: i + 1, total: batch.length });
-
+      // Handles one article end-to-end: create/find its Article shell,
+      // figure out which pages already exist (resume support), call the
+      // backend with whichever key(s) this call gets, poll Postgres for
+      // live per-page progress while waiting, then extract title/abstract
+      // from page 1's markdown once the backend call resolves.
+      const processArticle = async (url: string, keysForCall: string[]): Promise<ArticleResult> => {
+        send({ type: "start", url });
         const pdfUrl = buildPdfUrl(url);
 
         // Ensure an Article shell row exists before the backend starts
@@ -169,7 +183,7 @@ export async function POST(req: Request) {
         const backendPromise: Promise<BackendOutcome> = fetch(`${BACKEND_URL}/index-article`, {
           method: "POST",
           headers: { "Content-Type": "application/json", "X-Internal-Secret": INTERNAL_API_SECRET },
-          body: JSON.stringify({ url, pdfUrl, skipPages: Array.from(seenPages) }),
+          body: JSON.stringify({ url, pdfUrl, skipPages: Array.from(seenPages), cerebrasApiKeys: keysForCall }),
         })
           .then(async (res) => {
             backendSettled = true;
@@ -226,8 +240,7 @@ export async function POST(req: Request) {
             type: "stopped",
             reason: `Stopped at ${url}: couldn't reach the gemma4 backend at ${BACKEND_URL} — is it running (see backend/README.md)?`,
           });
-          controller.close();
-          return;
+          return "stop";
         }
 
         if (!outcome.ok) {
@@ -239,25 +252,12 @@ export async function POST(req: Request) {
           await prisma.article
             .update({ where: { id: article.id }, data: { gemmaStatus, gemmaError: message } })
             .catch(() => {});
-
-          if (outcome.rateLimited) {
-            send({ type: "rate_limited", url, message });
-            send({
-              type: "stopped",
-              reason:
-                "Cerebras rate-limited this request repeatedly — indexing paused so it doesn't keep hammering the same limit. Pages already transcribed are saved; re-run this batch later to resume from where it left off.",
-            });
-            controller.close();
-            return;
-          }
-
           send({ type: "llm_error", url, message });
-          // Non-rate-limit article failures don't stop the batch — keep going.
-          continue;
+          return "llm_error";
         }
 
-        // outcome.ok === true from here on.
         const failedPages = outcome.failedPages ?? [];
+        let result: ArticleResult = "success";
 
         try {
           if (!seenPages.has(1)) {
@@ -299,7 +299,6 @@ export async function POST(req: Request) {
             },
           });
 
-          processed++;
           send({
             type: "success",
             url,
@@ -315,10 +314,61 @@ export async function POST(req: Request) {
             .update({ where: { id: article.id }, data: { gemmaStatus: "partial", gemmaError: message } })
             .catch(() => {});
           send({ type: "llm_error", url, message });
+          result = "llm_error";
+        }
+
+        if (outcome.allKeysRateLimited) {
+          send({
+            type: "rate_limited",
+            url,
+            message: "All Cerebras API keys given to this call were rate-limited while processing this article.",
+          });
+          send({
+            type: "stopped",
+            reason:
+              "Every key in the pool got rate-limited — indexing paused so it doesn't keep hammering the same limit(s). Pages already transcribed are saved; re-run later (or add more keys at /settings) to resume.",
+          });
+          return "stop";
+        }
+
+        return result;
+      };
+
+      if (concurrencyMode === "pdfs_per_key") {
+        // One key per concurrently-processed article — up to `concurrency`
+        // articles in flight at once, each sequential internally (backend
+        // gets exactly one key, so its thread pool degenerates to size 1).
+        const concurrency = Math.max(1, Math.min(keys.length, batch.length));
+        let cursor = 0;
+        const workers = Array.from({ length: concurrency }, async (_, workerIndex) => {
+          const myKey = keys[workerIndex % keys.length];
+          while (!stopRequested) {
+            const idx = cursor++;
+            if (idx >= batch.length) break;
+            const result = await processArticle(batch[idx], [myKey]);
+            if (result === "success") processed++;
+            if (result === "stop") stopRequested = true;
+          }
+        });
+        await Promise.all(workers);
+      } else {
+        // pages_per_pdf (default): one article at a time, every enabled
+        // key handed to the backend so it splits that article's pages
+        // across all of them concurrently.
+        for (const url of batch) {
+          if (stopRequested) break;
+          const result = await processArticle(url, keys);
+          if (result === "success") processed++;
+          if (result === "stop") {
+            stopRequested = true;
+            break;
+          }
         }
       }
 
-      send({ type: "done", processed, remaining: pending.length - processed });
+      if (!stopRequested) {
+        send({ type: "done", processed, remaining: pending.length - processed });
+      }
       controller.close();
     },
   });

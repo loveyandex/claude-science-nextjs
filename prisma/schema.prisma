@@ -22,7 +22,7 @@ model Article {
   errorReason String?
   // gemma4 pipeline tracked separately since a url can be indexed by one
   // pipeline and not the other — see make-science-gemma4.
-  gemmaStatus String? // null (not run) | "indexed" | "failed"
+  gemmaStatus String? // null (not run) | "partial" | "indexed" | "failed"
   gemmaError  String?
   createdAt   DateTime      @default(now())
   pages       ArticlePage[]
@@ -42,6 +42,31 @@ model ArticlePage {
   createdAt  DateTime @default(now())
 
   @@unique([articleId, pageNumber])
+}
+
+// A pool of Cerebras API keys usable by the make-science-gemma4 pipeline —
+// managed from /settings, not from backend/.env. If this table is empty
+// and CEREBRAS_API_KEY is set in the Next.js app's own .env, it's
+// auto-seeded as one entry (source "env") the first time the pool is read.
+// The Python backend never stores keys itself: Next.js sends whichever
+// key(s) apply to a given /index-article call in the request body.
+model CerebrasApiKey {
+  id        String   @id @default(cuid())
+  label     String?
+  key       String
+  source    String   @default("manual") // "manual" | "env"
+  enabled   Boolean  @default(true)
+  createdAt DateTime @default(now())
+}
+
+// Single-row app-wide settings (fixed id "singleton", upserted lazily).
+model AppSettings {
+  id String @id @default("singleton")
+  // "pages_per_pdf" (default): one article at a time, all enabled keys
+  // split across that article's pages concurrently.
+  // "pdfs_per_key": up to N articles processed concurrently (N = enabled
+  // key count), each assigned exactly one key, pages sequential per article.
+  gemma4ConcurrencyMode String @default("pages_per_pdf")
 }
 
 model User {

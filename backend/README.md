@@ -5,6 +5,13 @@ render PDF pages to images (Poppler via `pdf2image`) and call Cerebras' `gemma-4
 model on each page. It never touches Postgres — it POSTs each finished page's markdown back to
 the Next.js app's `POST /api/articles-gemma4/ingest-page` route, which does the actual save.
 
+It also doesn't hold onto any Cerebras API key itself. The key pool lives in Postgres, managed
+at `/settings` in the Next.js app — every `/index-article` call carries whichever key(s) apply
+to that call in its body (`cerebrasApiKeys`). Sending more than one key round-robins that PDF's
+pages across them concurrently (a thread per key); sending one processes pages sequentially.
+`CEREBRAS_API_KEY` in this service's own `.env` is only ever a last-resort fallback, used if a
+request somehow arrives with an empty key list.
+
 ## Setup
 
 ```bash
@@ -31,7 +38,7 @@ to the Next.js indexing page's live feed as a per-article error.
 ## Environment variables (`backend/.env`)
 
 ```bash
-CEREBRAS_API_KEY=csk-...          # get a fresh one — do not reuse any key pasted in chat/logs
+CEREBRAS_API_KEY=csk-...          # OPTIONAL fallback only — real keys live at /settings now
 INTERNAL_API_SECRET=...           # random shared secret, must match Next.js's INTERNAL_API_SECRET
 NEXTJS_BASE_URL=http://localhost:3000
 GEMMA_MODEL_NAME=gemma-4-31b
@@ -52,8 +59,12 @@ Runs as its own process — not part of `npm run dev`. Start it separately whene
 ## API
 
 - `GET /health` — `{ok: true}`, no auth, for a quick liveness check.
-- `POST /index-article` — body `{url, pdfUrl}`, header `X-Internal-Secret: <INTERNAL_API_SECRET>`.
-  Downloads the PDF, renders every page to a PNG, sends each to Cerebras, and pushes each page's
-  markdown to the Next.js app as it completes. Returns `{ok: true, pageCount}` once the whole
-  article is done, or `{ok: false, error}` if anything failed partway through (pages already
-  pushed before the failure stay saved — this endpoint isn't transactional across pages).
+- `POST /index-article` — body `{url, pdfUrl, skipPages?, cerebrasApiKeys}`, header
+  `X-Internal-Secret: <INTERNAL_API_SECRET>`. Downloads the PDF, renders every page to a PNG
+  (skipping any in `skipPages` — already saved from a previous partial run), round-robins the
+  rest across `cerebrasApiKeys` concurrently, and pushes each page's markdown to the Next.js app
+  as it completes. A key that gets rate-limited (429) after retries is disabled for the rest of
+  this call only — other keys keep going. Returns `{ok: true, pageCount, failedPages,
+  allKeysRateLimited}` once done (per-page failures don't stop the article), or `{ok: false,
+  error}` if something failed before any page-level work could happen (e.g. the PDF itself
+  wouldn't download).
