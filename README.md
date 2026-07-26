@@ -5,6 +5,11 @@ indexed paper library, with full chat persistence (resume any conversation, reas
 calls included, from its own URL), plus the indexing pipeline that builds that library from real
 PDFs. Postgres + Prisma 7 (driver adapters) throughout.
 
+**Before making changes:** read `.agents/skills/README.md` first — it indexes three files
+covering things that aren't obvious from the code alone (the Prisma config split, auth
+tradeoffs, the message-persistence gotcha, the tool/agent-activity architecture, the design
+tokens). More on this in "Docs for whoever works on this next" below.
+
 ## Bugfixes this pass (found by actually running the app — see note below)
 
 Three real bugs from the previous pass, all confirmed against a live `npm run build` /
@@ -206,6 +211,16 @@ src/components/
                                      nav-highlight bug (/chat-assist-ui was also lighting up
                                      the /chat icon since "/chat-assist-ui".startsWith("/chat"))
 ```
+
+## Docs for whoever (or whatever) works on this next
+
+`.agents/skills/` — three files documenting things that aren't obvious from reading the code
+alone: the Prisma 7 driver-adapter split (two config points, easy to update only one), the
+localStorage/JWT auth tradeoffs, the `ensureMessageIds()` gotcha and why it exists, the
+model-switching/tool architecture, and the design-token system. Start at
+`.agents/skills/README.md` — it's a short index pointing to the other two. Worth reading before
+making non-trivial changes; this note exists because these docs went stale once already (written
+early, not updated through several rounds of real feature work) before getting a proper pass.
 
 ## Migrating this further toward production-grade
 

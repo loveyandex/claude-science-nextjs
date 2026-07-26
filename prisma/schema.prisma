@@ -10,22 +10,38 @@ datasource db {
 // `url` is the relative path exactly as returned by ARTICLES_LIST_URL
 // (e.g. "libgen.scimag00100000-00100999/10.1002/....pdf") — it's the
 // natural unique key since that's also how we re-check "already indexed?"
-// on every /make-science visit.
-//
-// Unchanged from the SQLite version — the migration to Postgres only
-// changes the datasource provider, not this model's shape or the code
-// that reads/writes it (src/app/api/articles/*, the chat tools).
+// on every /make-science and /make-science-gemma4 visit.
 model Article {
   id          String   @id @default(cuid())
   url         String   @unique
   pdfUrl      String
   title       String
   abstract    String
-  firstPage   String? // raw extracted first-page text, kept for debugging/re-processing
   pageCount   Int?
-  status      String   @default("indexed") // "indexed" | "failed"
+  status      String   @default("indexed") // old (/make-science) pipeline: "indexed" | "failed"
   errorReason String?
-  createdAt   DateTime @default(now())
+  // gemma4 pipeline tracked separately since a url can be indexed by one
+  // pipeline and not the other — see make-science-gemma4.
+  gemmaStatus String? // null (not run) | "indexed" | "failed"
+  gemmaError  String?
+  createdAt   DateTime      @default(now())
+  pages       ArticlePage[]
+}
+
+// One row per PDF page, produced by the make-science-gemma4 pipeline
+// (pdf2image render -> Cerebras gemma-4-31b vision call -> markdown).
+// Unlike the old pipeline's `firstPage` (removed), every page is stored,
+// so chat tools can read a whole article's real content instead of
+// re-fetching and re-parsing the PDF live on every call.
+model ArticlePage {
+  id         String   @id @default(cuid())
+  articleId  String
+  article    Article  @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  pageNumber Int
+  content    String // markdown transcription from Gemma
+  createdAt  DateTime @default(now())
+
+  @@unique([articleId, pageNumber])
 }
 
 model User {

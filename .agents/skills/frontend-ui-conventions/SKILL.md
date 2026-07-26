@@ -2,7 +2,8 @@
 
 A reference for keeping this project's UI consistent with claude.ai's actual design language,
 and for what's available if we reach for Radix Themes components later. Read this before making
-UI changes to `/chat`, `/chat-assist-ui`, `/library`, or `/make-science`.
+UI changes to `/chat`, `/chat-assist-ui`, `/library`, `/make-science`, `/recent`, or the
+`(auth)` login/signup pages.
 
 ## Design tokens (source of truth: `src/app/globals.css`)
 
@@ -62,8 +63,11 @@ instead, to stay consistent with the claude.ai-matched token system above rather
 Radix Themes' own palette. If a future page needs something Radix Themes covers well and we don't
 have a primitive for yet, these are the components to check first before hand-rolling one:
 
-- **Skeleton** — loading placeholders shaped like the content they'll become. Good fit for
-  `/library` cards and `/make-science`'s stat cards while data loads.
+- **Skeleton** — loading placeholders shaped like the content they'll become. **Implemented**
+  as `src/components/ui/skeleton.tsx` (hand-rolled to match our tokens, not pulled from Themes)
+  — used in `RequireAuth`'s auth-check state, `ChatSession`'s chat-loading state, and `/recent`'s
+  list-loading state. Reach for this rather than a spinner for anything that's fetching content
+  with a known shape.
   https://www.radix-ui.com/themes/docs/components/skeleton
 - **Scroll Area** — custom-styled scrollable regions using native scroll behavior. We currently
   do this with a plain `.scrollbar-thin` utility class; Radix's version would be worth it if we
@@ -78,11 +82,20 @@ have a primitive for yet, these are the components to check first before hand-ro
 
 Full component index: https://www.radix-ui.com/themes/docs/components
 
-## Prisma (v7 driver-adapter pattern)
+## Auth pages and `/recent` — same conventions, different chrome
 
-Prisma 7 moved the datasource URL out of `schema.prisma` and into `prisma.config.ts` (CLI-only)
-plus an explicit driver adapter passed to `new PrismaClient({ adapter })` (runtime). This project
-uses `@prisma/adapter-better-sqlite3` (native binding, no WASM query engine). See
-`src/lib/prisma.ts` and `prisma.config.ts`. Don't add `url = env("DATABASE_URL")` back to the
-`datasource` block in `schema.prisma` — that's the pre-v7 pattern and will conflict with the
-adapter-based client.
+`(auth)/login`, `(auth)/signup`: no sidebar, no header — just a centered card
+(`border-border/70 bg-card`, same composer-style rounding) on the plain `bg-background`. Don't
+add app-shell chrome to these; they're intentionally bare (see `(auth)/layout.tsx`).
+
+`/recent`: reuses the same search-input styling as `/library` (`bg-sidebar`,
+`border-border/70`, focus:`border-accent`) rather than inventing a new input style — if you add
+another searchable list page, match that, not a fresh design.
+
+## This file only covers UI/visual conventions
+
+For the database/auth/API architecture, see `../backend-architecture/SKILL.md`. For the AI SDK
+chat pipeline, model switching, tools, and the agent-activity timeline, see
+`../ai-chat-architecture/SKILL.md`. All three are meant to be read together when working on
+anything chat-related — the UI conventions here assume the data/streaming behavior documented
+in the other two.

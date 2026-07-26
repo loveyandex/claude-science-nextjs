@@ -13,6 +13,10 @@ export const maxDuration = 60;
 
 const ARTICLE_SELECT = { title: true, abstract: true, url: true, pdfUrl: true } as const;
 
+// Full-article dump for getArticleFullContent — a lot bigger than any
+// other tool result here, so it's capped defensively.
+const MAX_FULL_CONTENT_CHARS = 40000;
+
 // Opt-in: arbitrary code execution is genuinely dangerous. This runs as a
 // real subprocess with no sandbox beyond a timeout + output cap (see
 // src/lib/python-runner.ts) — leave this off in any shared/deployed
@@ -34,6 +38,10 @@ library" / broad discovery instead of forcing a keyword search.
 - readArticlePage: read one specific page of an article's original PDF by url + page number, for \
 when the abstract alone isn't enough and the person wants a specific page's content (e.g. "read \
 page 2 of that paper").
+- getArticleFullContent: read an article's *entire* content as markdown, page by page — only \
+available for articles indexed via make-science-gemma4 (the page-image/vision pipeline). Use this \
+when the person wants real depth/detail on one specific article rather than just its abstract, and \
+readArticlePage's one-page-at-a-time isn't enough.
 
 General tools:
 - webSearch: real web search (not the local library) for anything outside the indexed papers.
@@ -186,7 +194,7 @@ export async function POST(req: Request) {
 
       readArticlePage: tool({
         description:
-          "Read one specific page of an article's original PDF by url + page number (1-indexed). Page 1 is served from the cached abstract-extraction data; other pages are fetched and read from the live PDF on demand.",
+          "Read one specific page of an article's original PDF by url + page number (1-indexed), fetched and extracted from the live PDF on demand.",
         inputSchema: z.object({
           url: z.string().min(1).describe("The article's url field."),
           page: z.number().int().min(1).describe("1-indexed page number to read."),
@@ -194,13 +202,9 @@ export async function POST(req: Request) {
         execute: async ({ url, page }) => {
           const article = await prisma.article.findUnique({
             where: { url },
-            select: { pdfUrl: true, firstPage: true, pageCount: true, title: true },
+            select: { pdfUrl: true, pageCount: true, title: true },
           });
           if (!article) return { error: `No indexed article found for url "${url}".` };
-
-          if (page === 1 && article.firstPage) {
-            return { title: article.title, page: 1, pageCount: article.pageCount, text: article.firstPage };
-          }
 
           try {
             const res = await fetch(article.pdfUrl);
@@ -219,6 +223,41 @@ export async function POST(req: Request) {
           } catch (err) {
             return { error: err instanceof Error ? err.message : "Failed to read that page." };
           }
+        },
+      }),
+
+      getArticleFullContent: tool({
+        description:
+          "Read an article's entire content as markdown, all pages in order — only works for articles indexed via the make-science-gemma4 pipeline (page-image + vision model transcription). Use for real depth on one specific article, not for browsing/searching.",
+        inputSchema: z.object({
+          url: z.string().min(1).describe("The article's url field."),
+        }),
+        execute: async ({ url }) => {
+          const article = await prisma.article.findUnique({
+            where: { url },
+            select: {
+              title: true,
+              pageCount: true,
+              pages: { orderBy: { pageNumber: "asc" }, select: { pageNumber: true, content: true } },
+            },
+          });
+          if (!article) return { error: `No indexed article found for url "${url}".` };
+          if (article.pages.length === 0) {
+            return {
+              error: `"${article.title}" hasn't been indexed via make-science-gemma4 yet — no page content is stored for it. Try readArticlePage or getArticleByUrl instead.`,
+            };
+          }
+
+          const full = article.pages
+            .map((p: { pageNumber: number; content: string }) => `## Page ${p.pageNumber}\n\n${p.content}`)
+            .join("\n\n");
+
+          return {
+            title: article.title,
+            url,
+            pageCount: article.pageCount ?? article.pages.length,
+            content: full.slice(0, MAX_FULL_CONTENT_CHARS),
+          };
         },
       }),
 

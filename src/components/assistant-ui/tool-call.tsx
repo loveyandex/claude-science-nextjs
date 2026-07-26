@@ -17,6 +17,7 @@ import {
   BarChart3,
   FileSearch,
   BookOpen,
+  ScanEye,
   Globe,
   Terminal,
   AlertTriangle,
@@ -68,6 +69,11 @@ const TOOL_META: Record<
         ? `Reading page ${args.page ?? "?"} of "${shortUrl(args.url)}"`
         : "Reading a page",
   },
+  getArticleFullContent: {
+    icon: ScanEye,
+    label: (args) =>
+      args?.url ? `Reading full content of "${shortUrl(args.url)}"` : "Reading full article content",
+  },
   webSearch: {
     icon: Globe,
     label: (args) => (args?.query ? `Searching the web for "${args.query}"` : "Searching the web"),
@@ -88,6 +94,9 @@ function summarizeResult(toolName: string, result: unknown): string {
   }
   if (toolName === "readArticlePage" && typeof r.page === "number") {
     return `Read page ${r.page}${r.pageCount ? ` of ${r.pageCount}` : ""}.`;
+  }
+  if (toolName === "getArticleFullContent" && typeof r.pageCount === "number") {
+    return `Read all ${r.pageCount} page${r.pageCount === 1 ? "" : "s"} of "${String(r.title ?? "")}".`;
   }
   if (toolName === "runPythonCode") {
     const exitCode = (r as any).exitCode;
@@ -212,6 +221,17 @@ function ResultView({ toolName, result }: { toolName: string; result: unknown })
         <p className="max-h-40 overflow-y-auto whitespace-pre-wrap text-muted-foreground">
           {typeof r.text === "string" ? r.text || "(empty page)" : "(empty page)"}
         </p>
+      </div>
+    );
+  }
+
+  if (toolName === "getArticleFullContent" && typeof r.content === "string") {
+    return (
+      <div className="mt-0.5 space-y-1">
+        {Boolean(r.title) && <p className="text-foreground">{String(r.title)}</p>}
+        <pre className="max-h-64 overflow-y-auto whitespace-pre-wrap break-words text-muted-foreground">
+          {r.content || "(empty)"}
+        </pre>
       </div>
     );
   }

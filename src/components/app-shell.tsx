@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut } from "lucide-react";
+import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { STAT_PAPERS_INDEXED } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -31,7 +31,16 @@ const NAV_ITEMS = [
     href: "/make-science",
     label: "Index",
     icon: Database,
-    isActive: (p: string) => p.startsWith("/make-science"),
+    // Exact-ish match, not a bare startsWith — "/make-science-gemma4" would
+    // otherwise also match this prefix (same bug class already fixed once
+    // for /chat vs /chat-assist-ui).
+    isActive: (p: string) => p === "/make-science",
+  },
+  {
+    href: "/make-science-gemma4",
+    label: "Index (gemma4)",
+    icon: ScanEye,
+    isActive: (p: string) => p === "/make-science-gemma4",
   },
 ];
 

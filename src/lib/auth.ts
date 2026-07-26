@@ -1,5 +1,6 @@
 import { SignJWT, jwtVerify } from "jose";
 import bcrypt from "bcryptjs";
+import { timingSafeEqual } from "node:crypto";
 
 const JWT_SECRET = process.env.JWT_SECRET;
 
@@ -63,4 +64,20 @@ export async function getAuthFromRequest(req: Request): Promise<JwtPayload | nul
 
 export function unauthorized(message = "Unauthorized"): Response {
   return Response.json({ error: message }, { status: 401 });
+}
+
+/**
+ * Checks the `X-Internal-Secret` header used by the gemma4-indexing FastAPI
+ * backend (backend/main.py) to call back into Next.js — server-to-server,
+ * so there's no user JWT involved, just a shared secret both sides read
+ * from INTERNAL_API_SECRET.
+ */
+export function checkInternalSecret(req: Request): boolean {
+  const expected = process.env.INTERNAL_API_SECRET;
+  const provided = req.headers.get("x-internal-secret");
+  if (!expected || !provided) return false;
+  const a = Buffer.from(provided);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length) return false;
+  return timingSafeEqual(a, b);
 }
