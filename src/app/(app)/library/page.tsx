@@ -1,22 +1,51 @@
 "use client";
 
-import { useState } from "react";
-import { Search, SlidersHorizontal } from "lucide-react";
-import { PAPERS } from "@/lib/data";
-import { PaperCard } from "@/components/science-ui";
+import { useCallback, useEffect, useState } from "react";
+import { Search, SlidersHorizontal, ChevronLeft, ChevronRight } from "lucide-react";
+import { useAuth } from "@/components/auth/auth-context";
+import { ArticleCard, type IndexedArticle } from "@/components/science-ui";
+import { Skeleton } from "@/components/ui/skeleton";
+import { Button } from "@/components/ui/button";
+
+type Pagination = { page: number; limit: number; total: number; totalPages: number };
+
+const LIMIT = 20;
 
 export default function LibraryPage() {
+  const { authFetch } = useAuth();
   const [query, setQuery] = useState("");
+  const [debouncedQuery, setDebouncedQuery] = useState("");
+  const [page, setPage] = useState(1);
+  const [articles, setArticles] = useState<IndexedArticle[] | null>(null);
+  const [pagination, setPagination] = useState<Pagination | null>(null);
 
-  const filtered = PAPERS.filter((p) => {
-    const q = query.toLowerCase();
-    if (!q) return true;
-    return (
-      p.title.toLowerCase().includes(q) ||
-      p.authors.toLowerCase().includes(q) ||
-      p.tags.some((t) => t.toLowerCase().includes(q))
-    );
-  }).sort((a, b) => b.relevance - a.relevance);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      setDebouncedQuery(query.trim());
+      setPage(1);
+    }, 300);
+    return () => clearTimeout(t);
+  }, [query]);
+
+  const load = useCallback(() => {
+    const params = new URLSearchParams({ page: String(page), limit: String(LIMIT) });
+    if (debouncedQuery) params.set("q", debouncedQuery);
+    authFetch(`/api/articles?${params.toString()}`)
+      .then((res) => res.json())
+      .then((data) => {
+        setArticles(data.articles ?? []);
+        setPagination(data.pagination ?? null);
+      })
+      .catch(() => {
+        setArticles([]);
+        setPagination(null);
+      });
+  }, [authFetch, page, debouncedQuery]);
+
+  useEffect(() => {
+    setArticles(null); // show skeleton while (re)loading
+    load();
+  }, [load]);
 
   return (
     <div className="flex flex-col h-full min-h-0">
@@ -27,26 +56,60 @@ export default function LibraryPage() {
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Search 20M papers by title, author, topic..."
+              placeholder="Search indexed papers by title or abstract..."
               className="flex-1 bg-transparent outline-none text-[13px] font-body placeholder:text-muted-foreground"
             />
             <SlidersHorizontal size={13} className="text-muted-foreground" />
           </div>
           <p className="font-mono text-[10px] text-muted-foreground">
-            {filtered.length} results · sorted by relevance
+            {pagination ? `${pagination.total} results · sorted by newest indexed` : " "}
           </p>
         </div>
       </div>
       <div className="flex-1 overflow-y-auto scrollbar-thin px-4 md:px-8 py-5">
-        <div className="max-w-3xl mx-auto w-full grid grid-cols-1 sm:grid-cols-2 gap-3">
-          {filtered.map((p) => (
-            <PaperCard key={p.id} paper={p} />
-          ))}
-          {filtered.length === 0 && (
+        <div className="max-w-3xl mx-auto w-full space-y-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            {articles === null &&
+              Array.from({ length: 8 }).map((_, i) => (
+                <Skeleton key={i} className="h-[126px] w-full rounded-lg" />
+              ))}
+
+            {articles?.map((a) => (
+              <ArticleCard key={a.id} article={a} />
+            ))}
+          </div>
+
+          {articles !== null && articles.length === 0 && (
             <div className="col-span-full text-center py-10">
               <p className="font-mono text-[11px] text-muted-foreground">
-                No matches. Try a broader term.
+                {debouncedQuery
+                  ? "No matches. Try a broader term."
+                  : "No papers indexed yet — run make/science to index some."}
               </p>
+            </div>
+          )}
+
+          {pagination && pagination.totalPages > 1 && (
+            <div className="flex items-center justify-center gap-3 pt-2">
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={page <= 1}
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+              >
+                <ChevronLeft size={14} /> prev
+              </Button>
+              <span className="font-mono text-[11px] text-muted-foreground">
+                page {pagination.page} / {pagination.totalPages}
+              </span>
+              <Button
+                variant="ghost"
+                size="sm"
+                disabled={page >= pagination.totalPages}
+                onClick={() => setPage((p) => p + 1)}
+              >
+                next <ChevronRight size={14} />
+              </Button>
             </div>
           )}
         </div>

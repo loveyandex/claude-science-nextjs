@@ -1,9 +1,74 @@
 "use client";
 
 import Link from "next/link";
-import { Quote } from "lucide-react";
+import { FileText, Quote, ScanEye } from "lucide-react";
 import type { Paper } from "@/lib/data";
 import { Badge } from "@/components/ui/badge";
+
+export type IndexedArticle = {
+  id: string;
+  url: string;
+  pdfUrl: string;
+  title: string;
+  abstract: string;
+  pageCount: number | null;
+  status: string;
+  gemmaStatus: string | null;
+  createdAt: string;
+};
+
+/** Last path segment of an article's source `url`, used as a stand-in for
+ * an authors/journal line since the indexed metadata has no such fields. */
+function sourceLabel(url: string): string {
+  const decoded = decodeURIComponent(url.split("/").pop() || url);
+  return decoded.replace(/\.pdf$/i, "");
+}
+
+function relativeTime(iso: string): string {
+  const diffMs = Date.now() - new Date(iso).getTime();
+  const mins = Math.round(diffMs / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.round(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.round(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return new Date(iso).toLocaleDateString();
+}
+
+export function ArticleCard({ article }: { article: IndexedArticle }) {
+  const viaGemma = article.gemmaStatus === "indexed" || article.gemmaStatus === "partial";
+  return (
+    <Link
+      href={`/library/${article.id}`}
+      className="w-full text-left bg-card border border-border rounded-lg p-3.5 hover:border-accent transition-colors group block"
+    >
+      <div className="flex items-start justify-between gap-2 mb-1.5">
+        <span
+          className="font-mono text-[10px] text-muted-foreground truncate"
+          title={article.url}
+        >
+          {sourceLabel(article.url)}
+        </span>
+        <span className="shrink-0 inline-flex items-center gap-1 font-mono text-[9px] uppercase tracking-wide text-muted-foreground">
+          {viaGemma ? <ScanEye size={11} /> : <FileText size={11} />}
+          {viaGemma ? "gemma4" : "text"}
+        </span>
+      </div>
+      <h3 className="font-display font-semibold text-[14px] leading-snug text-foreground group-hover:text-accent transition-colors">
+        {article.title}
+      </h3>
+      <p className="font-body text-[12px] text-muted-foreground mt-1.5 line-clamp-2">
+        {article.abstract || "No abstract extracted."}
+      </p>
+      <div className="flex items-center gap-2 mt-2 font-mono text-[11px] text-muted-foreground flex-wrap">
+        <span>{article.pageCount ?? "?"} pages</span>
+        <span className="text-border">·</span>
+        <span>indexed {relativeTime(article.createdAt)}</span>
+      </div>
+    </Link>
+  );
+}
 
 export function RelevanceBars({ score }: { score: number }) {
   const filled = Math.round(score / 12.5);
