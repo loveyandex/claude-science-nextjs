@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye } from "lucide-react";
+import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { STAT_PAPERS_INDEXED } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -89,6 +89,18 @@ export function AppShell({ children }: { children: React.ReactNode }) {
         >
           <Search size={17} />
         </Link>
+        <Link
+          href="/settings"
+          title="Settings"
+          className={cn(
+            "w-10 h-10 rounded-md flex items-center justify-center transition-colors",
+            pathname.startsWith("/settings")
+              ? "bg-accent text-accent-foreground"
+              : "text-muted-foreground hover:bg-border/50 hover:text-foreground"
+          )}
+        >
+          <Settings size={17} />
+        </Link>
         <button
           onClick={logout}
           title="Log out"
@@ -149,6 +161,16 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="w-1.5 h-1.5 rounded-full bg-accent" />
               {user?.email ?? "indexed & grounded locally"}
             </div>
+            <Link
+              href="/settings"
+              className={cn(
+                "md:hidden transition-colors",
+                pathname.startsWith("/settings") ? "text-accent" : "text-muted-foreground"
+              )}
+              title="Settings"
+            >
+              <Settings size={15} />
+            </Link>
             <button
               onClick={logout}
               className="md:hidden text-muted-foreground hover:text-destructive transition-colors"
