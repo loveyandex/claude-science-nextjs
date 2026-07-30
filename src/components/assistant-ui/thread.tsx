@@ -37,7 +37,7 @@ export function Thread() {
               message.role === "user" ? <UserMessage /> : <AssistantMessage />
             }
           </ThreadPrimitive.Messages>
-          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-3xl bg-gradient-to-b from-transparent via-background/85 to-background pt-4 pb-3">
+          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-2xl bg-gradient-to-b from-transparent via-background/85 to-background pt-4 pb-3">
             <Composer />
             <p className="pt-2.5 text-center font-mono text-[11px] text-muted-foreground">
               Grounded in your indexed library — searches it before answering.
@@ -50,11 +50,6 @@ export function Thread() {
 }
 
 function EmptyState() {
-  const prompts = [
-    "What delivery mechanisms show up most in the indexed papers?",
-    "Summarize what's indexed about CRISPR off-target safety.",
-    "Any papers on blood-brain-barrier delivery?",
-  ];
   return (
     <div className="flex grow flex-col items-center justify-center px-4">
       <div className="mx-auto flex w-full max-w-2xl flex-col items-stretch gap-6">
@@ -63,18 +58,6 @@ function EmptyState() {
           <span>How can I help you today?</span>
         </h1>
         <Composer />
-        <div className="flex flex-wrap items-center justify-center gap-2">
-          {prompts.map((p) => (
-            <ThreadPrimitive.Suggestion
-              key={p}
-              prompt={p}
-              send
-              className="rounded-lg border border-border/60 bg-transparent px-3.5 py-2 font-serif text-sm text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground"
-            >
-              {p}
-            </ThreadPrimitive.Suggestion>
-          ))}
-        </div>
       </div>
     </div>
   );
@@ -82,11 +65,11 @@ function EmptyState() {
 
 function Composer() {
   return (
-    <ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl border border-border/70 bg-card px-4 pt-3.5 pb-3 shadow-sm">
+    <ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl border border-border/70 bg-card px-4 pt-4 pb-3.5 shadow-sm">
       <ComposerPrimitive.Input
         placeholder="How can I help you today?"
         rows={1}
-        className="block max-h-72 min-h-7 w-full resize-none bg-transparent font-serif text-base text-foreground outline-none placeholder:text-muted-foreground"
+        className="block max-h-72 min-h-14 w-full resize-none bg-transparent font-serif text-base text-foreground outline-none placeholder:text-muted-foreground"
       />
       <div className="flex w-full items-center gap-2">
         <ModelPicker />
@@ -121,7 +104,7 @@ function ComposerPrimaryAction() {
 function UserMessage() {
   return (
     <MessagePrimitive.Root className="group/message relative mx-auto flex w-full max-w-3xl flex-col items-end gap-1 py-2">
-      <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-sidebar px-4 py-2.5 text-base text-foreground">
+      <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-user-message px-4 py-2.5 text-base text-foreground">
         <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
       </div>
       <ActionBarPrimitive.Root

@@ -15,6 +15,7 @@
     --background: 48 33.3% 97.1%;
     --sidebar: 48 33.3% 97.1%; /* same as background — thin border separates, not color */
     --card: 0 0% 100%;
+    --user-message: 46 20% 92%; /* bg-300 equivalent — distinct surface for the user's chat bubble */
     --foreground: 60 2.6% 7.6%;
     --muted-foreground: 51 3.1% 43.7%;
     --border: 45 22% 89%;
@@ -32,6 +33,7 @@
     --background: 60 2% 12%; /* gray-800 (bg-100) */
     --sidebar: 60 2% 12%; /* same as background — hairline border does the separating */
     --card: 60 3% 21%; /* gray-750 (bg-000) — slightly lighter, elevated surface (composer) */
+    --user-message: 60 3% 17%; /* bg-300 equivalent — between page bg and elevated surfaces */
     --foreground: 0 0% 100%; /* gray-0 (text-000) */
     --muted-foreground: 48 5% 57%; /* gray-350 (text-300) */
     --border: 40 2% 26%; /* gray-650 — subtle, thin hairline between bg and text */
@@ -138,5 +140,23 @@
     border: 1px solid hsl(var(--border));
     padding: 0.4rem 0.6rem;
     text-align: left;
+  }
+  .chat-markdown img {
+    max-width: 100%;
+    border-radius: 0.5rem;
+    border: 1px solid hsl(var(--border));
+  }
+  .chat-markdown hr {
+    border: none;
+    border-top: 1px solid hsl(var(--border));
+    margin: 1.25rem 0;
+  }
+  .chat-markdown .katex {
+    font-size: 1.05em;
+  }
+  .chat-markdown .katex-display {
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: 0.25rem 0;
   }
 }

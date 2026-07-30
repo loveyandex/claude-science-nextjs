@@ -68,6 +68,16 @@ export function getModel(id: string | undefined | null): LanguageModel {
   return openaiCompatible(modelName);
 }
 
+/**
+ * Gemini 3.x models expose reasoning depth via thinkingConfig.thinkingLevel
+ * (MINIMAL/LOW/MEDIUM/HIGH) instead of the thinkingBudget token count used
+ * by 2.x models — the two aren't interchangeable, so callers need to know
+ * which family the selected model id resolves to.
+ */
+export function isGemini3(id: string | undefined | null): boolean {
+  return id === "gemini-flash-lite" && geminiModelName.startsWith("gemini-3");
+}
+
 /** The default chat-capable model — used by /make-science's extraction step, which doesn't offer a picker. */
 export const model = openaiCompatible(modelName);
 

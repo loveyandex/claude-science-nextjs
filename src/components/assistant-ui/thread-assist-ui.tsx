@@ -24,11 +24,9 @@ import {
   ArrowUp,
   Check,
   Copy,
-  FlaskConical,
   Pencil,
   Plus,
   RefreshCcw,
-  Shield,
   Sparkle,
   Square,
   ThumbsDown,
@@ -53,7 +51,7 @@ export function ThreadAssistUI() {
           <ThreadPrimitive.Messages>
             {() => <ChatMessage />}
           </ThreadPrimitive.Messages>
-          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-3xl bg-gradient-to-b from-transparent via-background/85 to-background pt-4 pb-3">
+          <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-2xl bg-gradient-to-b from-transparent via-background/85 to-background pt-4 pb-3">
             <Composer />
             <p className="pt-2.5 text-center font-mono text-[11px] text-muted-foreground">
               assistant-ui reference build — same /api/chat backend as the main Chat page.
@@ -73,18 +71,17 @@ const EmptyState = () => (
         <span>How can I help you today?</span>
       </h1>
       <Composer />
-      <TopicChips />
     </div>
   </div>
 );
 
 const Composer = () => {
   return (
-    <ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl border border-border/70 bg-card px-3.5 pt-3 pb-2.5 shadow-sm">
+    <ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl border border-border/70 bg-card px-3.5 pt-3.5 pb-3 shadow-sm">
       <ComposerPrimitive.Input
         placeholder="How can I help you today?"
         rows={1}
-        className="block max-h-72 min-h-6 w-full resize-none bg-transparent font-serif text-base text-foreground outline-none placeholder:text-muted-foreground"
+        className="block max-h-72 min-h-14 w-full resize-none bg-transparent font-serif text-base text-foreground outline-none placeholder:text-muted-foreground"
       />
       <div className="flex w-full items-center gap-2">
         <ComposerPrimitive.AddAttachment
@@ -134,34 +131,12 @@ const ComposerPrimaryAction = () => {
   );
 };
 
-const TOPICS = [
-  { label: "Delivery mechanisms", Icon: FlaskConical, prompt: "What delivery mechanisms show up most across the indexed papers?" },
-  { label: "Safety & off-target", Icon: Shield, prompt: "Summarize what's indexed about off-target safety." },
-  { label: "Recent additions", Icon: Sparkle, prompt: "What are the most recently indexed papers, and what do they cover?" },
-];
-
-const TopicChips = () => (
-  <div className="flex flex-wrap items-center justify-center gap-2">
-    {TOPICS.map(({ label, Icon, prompt }) => (
-      <ThreadPrimitive.Suggestion
-        key={label}
-        prompt={prompt}
-        send
-        className="flex h-8 items-center gap-1.5 rounded-lg border border-border/60 bg-transparent px-3 text-sm whitespace-nowrap text-foreground transition-colors hover:bg-foreground/5"
-      >
-        <Icon className="size-3.5 text-muted-foreground" />
-        <span className="font-serif">{label}</span>
-      </ThreadPrimitive.Suggestion>
-    ))}
-  </div>
-);
-
 const ChatMessage = () => {
   return (
     <MessagePrimitive.Root className="group/message relative mx-auto flex w-full max-w-3xl flex-col py-2">
       <AuiIf condition={(s) => s.message.role === "user"}>
         <div className="flex flex-col items-end gap-1">
-          <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-sidebar px-4 py-2.5 text-base text-foreground">
+          <div className="max-w-[80%] whitespace-pre-wrap rounded-2xl bg-user-message px-4 py-2.5 text-base text-foreground">
             <MessagePrimitive.Parts components={{ Text: MarkdownText }} />
           </div>
           <ActionBarPrimitive.Root className="-mt-px flex items-center gap-0.5 opacity-0 transition-opacity group-focus-within/message:opacity-100 group-hover/message:opacity-100">

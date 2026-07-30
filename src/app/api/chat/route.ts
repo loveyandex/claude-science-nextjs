@@ -1,6 +1,6 @@
 import { streamText, convertToModelMessages, stepCountIs, tool, type UIMessage } from "ai";
 import { z } from "zod";
-import { getModel, type ModelId } from "@/lib/ai-provider";
+import { getModel, isGemini3, type ModelId } from "@/lib/ai-provider";
 import { prisma } from "@/lib/prisma";
 import { extractPageText } from "@/lib/pdf";
 import { webSearch } from "@/lib/web-search";
@@ -94,8 +94,21 @@ export async function POST(req: Request) {
     // Best-effort "thinking mode": Gemini supports this natively via
     // thinkingConfig; other providers ignore unknown providerOptions
     // namespaces rather than erroring, so this is safe to always pass.
+    // Gemini 3.x models (e.g. gemini-3.1-flash-lite) control reasoning
+    // depth via thinkingLevel, not the thinkingBudget token count used by
+    // 2.x models — without it, includeThoughts alone doesn't turn thinking
+    // on for 3.x and the model just streams a plain answer.
     providerOptions: thinking
-      ? { google: { thinkingConfig: { includeThoughts: true } } }
+      ? {
+          google: {
+            thinkingConfig: {
+              includeThoughts: true,
+              ...(isGemini3(modelId)
+                ? { thinkingLevel: "high" }
+                : { thinkingBudget: -1 }),
+            },
+          },
+        }
       : undefined,
     tools: {
       searchArticles: tool({

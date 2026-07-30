@@ -25,6 +25,7 @@ const config: Config = {
           DEFAULT: "hsl(var(--card) / <alpha-value>)",
           foreground: "hsl(var(--foreground) / <alpha-value>)",
         },
+        "user-message": "hsl(var(--user-message) / <alpha-value>)",
         muted: {
           DEFAULT: "hsl(var(--sidebar) / <alpha-value>)",
           foreground: "hsl(var(--muted-foreground) / <alpha-value>)",

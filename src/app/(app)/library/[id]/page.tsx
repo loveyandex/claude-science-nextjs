@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import Link from "next/link";
 import { useParams } from "next/navigation";
-import { ChevronLeft, FileText, ScanEye, BookMarked } from "lucide-react";
+import { ChevronLeft, FileText, ScanEye, BookMarked, BookOpenText } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-context";
 import type { IndexedArticle } from "@/components/science-ui";
 import { Skeleton } from "@/components/ui/skeleton";
@@ -116,6 +116,13 @@ export default function ArticleDetailPage() {
                   <FileText size={13} /> Open full PDF
                 </a>
               </Button>
+              {viaGemma && (
+                <Button variant="outline" asChild>
+                  <Link href={`/library/${article.id}/markdown`}>
+                    <BookOpenText size={13} /> Read as markdown
+                  </Link>
+                </Button>
+              )}
             </div>
           </>
         )}
