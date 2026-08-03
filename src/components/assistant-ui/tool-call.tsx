@@ -19,6 +19,7 @@ import {
   BookOpen,
   ScanEye,
   Globe,
+  Radar,
   Terminal,
   AlertTriangle,
   Check,
@@ -45,6 +46,11 @@ const TOOL_META: Record<
     label: (args: any) => string;
   }
 > = {
+  searchLibrarySemantic: {
+    icon: Radar,
+    label: (args) =>
+      args?.query ? `Searching papers about "${args.query}"` : "Searching papers by meaning",
+  },
   searchArticles: {
     icon: Search,
     label: (args) =>
@@ -251,6 +257,40 @@ function ResultView({ toolName, result }: { toolName: string; result: unknown })
         )}
         {!r.stdout && !r.stderr && <p className="text-muted-foreground">(no output)</p>}
       </div>
+    );
+  }
+
+  // Semantic hits carry the passages they matched on, which is the whole
+  // point of using them over keyword search — show the text, not just a
+  // list of titles like the generic branch below would.
+  if (toolName === "searchLibrarySemantic" && Array.isArray(r.results)) {
+    if (r.results.length === 0) {
+      return <p className="mt-0.5 text-muted-foreground">No semantically similar papers found.</p>;
+    }
+    return (
+      <ul className="mt-0.5 space-y-2.5">
+        {r.results.map((match: any, i: number) => (
+          <li key={i} className="space-y-1">
+            <div className="flex items-start gap-1.5">
+              <Check size={12} className="mt-0.5 shrink-0 text-accent" />
+              <span className="text-foreground">{match.title ?? "untitled"}</span>
+              {typeof match.bestScore === "number" && (
+                <span className="ml-auto shrink-0 font-mono text-[10px] text-muted-foreground">
+                  {match.bestScore.toFixed(3)}
+                </span>
+              )}
+            </div>
+            {Array.isArray(match.passages) &&
+              match.passages.slice(0, 2).map((p: any, j: number) => (
+                <p key={j} className="pl-[18px] text-muted-foreground">
+                  <span className="font-mono text-[10px]">p.{p.pageNumber}</span>{" "}
+                  {String(p.text ?? "").slice(0, 220)}
+                  {String(p.text ?? "").length > 220 ? "…" : ""}
+                </p>
+              ))}
+          </li>
+        ))}
+      </ul>
     );
   }
 

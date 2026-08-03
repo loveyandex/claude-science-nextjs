@@ -42,6 +42,30 @@ const config: Config = {
           DEFAULT: "hsl(var(--destructive) / <alpha-value>)",
           foreground: "hsl(0 0% 100% / <alpha-value>)",
         },
+        // Status colors from the CDS palette (see globals.css layer 3) —
+        // used by the embedding pipeline UI for done/in-flight/queued
+        // states instead of reaching for raw Tailwind palette classes.
+        success: {
+          DEFAULT: "hsl(var(--success) / <alpha-value>)",
+          foreground: "hsl(0 0% 100% / <alpha-value>)",
+        },
+        warning: {
+          DEFAULT: "hsl(var(--warning) / <alpha-value>)",
+          foreground: "hsl(0 0% 0% / <alpha-value>)",
+        },
+        info: {
+          DEFAULT: "hsl(var(--info) / <alpha-value>)",
+          foreground: "hsl(0 0% 100% / <alpha-value>)",
+        },
+        // Direct access to the CDS surface ramp for the rare case a
+        // component needs a specific step rather than a semantic role.
+        surface: {
+          "000": "hsl(var(--bg-000) / <alpha-value>)",
+          "100": "hsl(var(--bg-100) / <alpha-value>)",
+          "200": "hsl(var(--bg-200) / <alpha-value>)",
+          "300": "hsl(var(--bg-300) / <alpha-value>)",
+          "400": "hsl(var(--bg-400) / <alpha-value>)",
+        },
       },
       borderRadius: {
         lg: "0.75rem",
@@ -54,10 +78,18 @@ const config: Config = {
           from: { opacity: "0", transform: "translateY(6px)" },
           to: { opacity: "1", transform: "translateY(0)" },
         },
+        // Indeterminate "work is happening" sheen for progress bars whose
+        // total isn't known yet (a page whose chunk count is still being
+        // computed) — see components/embedding/progress-bar.tsx.
+        shimmer: {
+          "0%": { transform: "translateX(-100%)" },
+          "100%": { transform: "translateX(200%)" },
+        },
       },
       animation: {
         "fade-in": "fade-in 0.2s ease-out",
         "slide-up": "slide-up 0.25s ease-out",
+        shimmer: "shimmer 1.4s ease-in-out infinite",
       },
     },
   },

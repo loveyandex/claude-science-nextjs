@@ -3,43 +3,245 @@
 @tailwind utilities;
 
 @layer base {
+  /* ---------------------------------------------------------------------
+     Layer 1 — the raw Claude Design System scale, copied verbatim from
+     claude.ai's own stylesheet. These are mode-independent *facts* about
+     the palette: never reference them directly from a component, and
+     never redefine them per-theme. Bare `H S% L%` triplets so every
+     consumer (Tailwind's `hsl(var(--x) / <alpha-value>)` pattern, or a
+     plain `hsl()` call in CSS) keeps working with opacity modifiers.
+     --------------------------------------------------------------------- */
+  :root {
+    --cds-hsl-gray-0: 0 0% 100%;
+    --cds-hsl-gray-10: 60 14.2857% 98.6275%;
+    --cds-hsl-gray-20: 60 14.2857% 97.2549%;
+    --cds-hsl-gray-30: 60 10% 96.0784%;
+    --cds-hsl-gray-40: 60 11.1111% 94.7059%;
+    --cds-hsl-gray-50: 45 11.7647% 93.3333%;
+    --cds-hsl-gray-60: 48 12.1951% 91.9608%;
+    --cds-hsl-gray-80: 50 11.1111% 89.4118%;
+    --cds-hsl-gray-90: 51.4286 11.4754% 88.0392%;
+    --cds-hsl-gray-100: 52.5 11.7647% 86.6667%;
+    --cds-hsl-gray-150: 54.5455 10.8911% 80.1961%;
+    --cds-hsl-gray-200: 55 9.0909% 74.1176%;
+    --cds-hsl-gray-300: 54.5455 5.7592% 62.549%;
+    --cds-hsl-gray-350: 48 4.5872% 57.2549%;
+    --cds-hsl-gray-450: 42.8571 2.9289% 46.8627%;
+    --cds-hsl-gray-500: 40 2.8302% 41.5686%;
+    --cds-hsl-gray-600: 45 2.5% 31.3725%;
+    --cds-hsl-gray-650: 40 2.2222% 26.4706%;
+    --cds-hsl-gray-700: 60 2.7523% 21.3725%;
+    --cds-hsl-gray-750: 60 2.3256% 16.8627%;
+    --cds-hsl-gray-800: 60 1.5873% 12.3529%;
+    --cds-hsl-gray-810: 60 1.6949% 11.5686%;
+    --cds-hsl-gray-830: 60 1.9608% 10%;
+    --cds-hsl-gray-840: 60 2.1277% 9.2157%;
+    --cds-hsl-gray-850: 0 0% 8.2353%;
+    --cds-hsl-gray-860: 0 0% 7.451%;
+    --cds-hsl-gray-870: 0 0% 6.6667%;
+    --cds-hsl-gray-890: 0 0% 5.098%;
+    --cds-hsl-gray-900: 0 0% 4.3137%;
+    --cds-hsl-red-100: 0 78.2609% 90.9804%;
+    --cds-hsl-red-200: 0 76.8421% 81.3725%;
+    --cds-hsl-red-350: 0 71.7514% 65.2941%;
+    --cds-hsl-red-400: 0.3871 73.4597% 58.6275%;
+    --cds-hsl-red-450: 0 61.3169% 52.3529%;
+    --cds-hsl-red-600: 0 57.7778% 35.2941%;
+    --cds-hsl-red-750: 0 63.6364% 19.4118%;
+    --cds-hsl-yellow-100: 39.5294 87.6289% 80.9804%;
+    --cds-hsl-yellow-200: 40.8 95.7447% 53.9216%;
+    --cds-hsl-yellow-350: 39.7015 100% 39.4118%;
+    --cds-hsl-yellow-400: 39.0164 100% 35.8824%;
+    --cds-hsl-yellow-450: 38.3133 100% 32.549%;
+    --cds-hsl-yellow-600: 36 100% 22.549%;
+    --cds-hsl-yellow-750: 33.2308 100% 12.7451%;
+    --cds-hsl-green-100: 114.857 45.4545% 84.902%;
+    --cds-hsl-green-200: 115.2 47.7707% 69.2157%;
+    --cds-hsl-green-400: 120 86.2857% 34.3137%;
+    --cds-hsl-green-450: 120 100% 28.8235%;
+    --cds-hsl-green-600: 120 100% 19.4118%;
+    --cds-hsl-green-750: 117 60.6061% 12.9412%;
+    --cds-hsl-blue-100: 212.609 85.1852% 89.4118%;
+    --cds-hsl-blue-200: 212.791 79.6296% 78.8235%;
+    --cds-hsl-blue-350: 212.466 75.2577% 61.9608%;
+    --cds-hsl-blue-500: 213.117 67.5439% 44.7059%;
+    --cds-hsl-blue-600: 213.6 72.2543% 33.9216%;
+    --cds-hsl-blue-750: 212.593 87.0968% 18.2353%;
+    --cds-hsl-violet-100: 247.059 89.4737% 92.549%;
+    --cds-hsl-violet-200: 246 75% 84.3137%;
+    --cds-hsl-violet-350: 246.6 69.4444% 71.7647%;
+    --cds-hsl-violet-400: 247.5 66.6667% 67.0588%;
+    --cds-hsl-violet-450: 247.559 67.1958% 62.9412%;
+    --cds-hsl-violet-600: 248.807 48.4444% 44.1176%;
+    --cds-hsl-violet-750: 248.182 52.381% 24.7059%;
+    --cds-hsl-clay: 14.7692 63.1068% 59.6078%;
+    --cds-hsl-clay-emphasized: 15.1111 54.2169% 51.1765%;
+
+    /* Layer 2 — the private aliases claude.ai's own theme layer uses.
+       Kept as a separate indirection (rather than collapsing them into
+       layer 1) so a future palette swap only has to move these. */
+    --always-black: 0 0% 0%;
+    --always-white: 0 0% 100%;
+    --_brand-clay: var(--cds-hsl-clay);
+    --_brand-clay-emphasized: var(--cds-hsl-clay-emphasized);
+    --_gray-0: var(--cds-hsl-gray-0);
+    --_gray-10: var(--cds-hsl-gray-10);
+    --_gray-20: var(--cds-hsl-gray-20);
+    --_gray-30: var(--cds-hsl-gray-30);
+    --_gray-40: var(--cds-hsl-gray-40);
+    --_gray-50: var(--cds-hsl-gray-50);
+    --_gray-60: var(--cds-hsl-gray-60);
+    --_gray-80: var(--cds-hsl-gray-80);
+    --_gray-90: var(--cds-hsl-gray-90);
+    --_gray-100: var(--cds-hsl-gray-100);
+    --_gray-150: var(--cds-hsl-gray-150);
+    --_gray-200: var(--cds-hsl-gray-200);
+    --_gray-300: var(--cds-hsl-gray-300);
+    --_gray-350: var(--cds-hsl-gray-350);
+    --_gray-450: var(--cds-hsl-gray-450);
+    --_gray-500: var(--cds-hsl-gray-500);
+    --_gray-600: var(--cds-hsl-gray-600);
+    --_gray-650: var(--cds-hsl-gray-650);
+    --_gray-700: var(--cds-hsl-gray-700);
+    --_gray-750: var(--cds-hsl-gray-750);
+    --_gray-800: var(--cds-hsl-gray-800);
+    --_gray-810: var(--cds-hsl-gray-810);
+    --_gray-830: var(--cds-hsl-gray-830);
+    --_gray-840: var(--cds-hsl-gray-840);
+    --_gray-850: var(--cds-hsl-gray-850);
+    --_gray-860: var(--cds-hsl-gray-860);
+    --_gray-870: var(--cds-hsl-gray-870);
+    --_gray-890: var(--cds-hsl-gray-890);
+    --_gray-900: var(--cds-hsl-gray-900);
+    --_red-100: var(--cds-hsl-red-100);
+    --_red-200: var(--cds-hsl-red-200);
+    --_red-350: var(--cds-hsl-red-350);
+    --_red-400: var(--cds-hsl-red-400);
+    --_red-450: var(--cds-hsl-red-450);
+    --_red-600: var(--cds-hsl-red-600);
+    --_red-750: var(--cds-hsl-red-750);
+    --_yellow-100: var(--cds-hsl-yellow-100);
+    --_yellow-200: var(--cds-hsl-yellow-200);
+    --_yellow-350: var(--cds-hsl-yellow-350);
+    --_yellow-400: var(--cds-hsl-yellow-400);
+    --_yellow-450: var(--cds-hsl-yellow-450);
+    --_yellow-600: var(--cds-hsl-yellow-600);
+    --_yellow-750: var(--cds-hsl-yellow-750);
+    --_green-100: var(--cds-hsl-green-100);
+    --_green-200: var(--cds-hsl-green-200);
+    --_green-400: var(--cds-hsl-green-400);
+    --_green-450: var(--cds-hsl-green-450);
+    --_green-600: var(--cds-hsl-green-600);
+    --_green-750: var(--cds-hsl-green-750);
+    --_blue-100: var(--cds-hsl-blue-100);
+    --_blue-200: var(--cds-hsl-blue-200);
+    --_blue-350: var(--cds-hsl-blue-350);
+    --_blue-500: var(--cds-hsl-blue-500);
+    --_blue-600: var(--cds-hsl-blue-600);
+    --_blue-750: var(--cds-hsl-blue-750);
+    --_violet-100: var(--cds-hsl-violet-100);
+    --_violet-200: var(--cds-hsl-violet-200);
+    --_violet-350: var(--cds-hsl-violet-350);
+    --_violet-400: var(--cds-hsl-violet-400);
+    --_violet-450: var(--cds-hsl-violet-450);
+    --_violet-600: var(--cds-hsl-violet-600);
+    --_violet-750: var(--cds-hsl-violet-750);
+  }
+
   :root {
     --font-display: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
     --font-body: "Inter", ui-sans-serif, system-ui, -apple-system, sans-serif;
     --font-mono: "JetBrains Mono", ui-monospace, "SFMono-Regular", monospace;
     --font-serif: "Source Serif 4", ui-serif, Georgia, "Times New Roman", serif;
 
-    /* Sourced from claude.ai's real light-mode token values (bg-100/200/000,
-       text-000/400, accent-brand, danger-100) so this reads as the actual
-       Claude palette rather than an approximation. */
-    --background: 48 33.3% 97.1%;
-    --sidebar: 48 33.3% 97.1%; /* same as background — thin border separates, not color */
-    --card: 0 0% 100%;
-    --user-message: 46 20% 92%; /* bg-300 equivalent — distinct surface for the user's chat bubble */
-    --foreground: 60 2.6% 7.6%;
-    --muted-foreground: 51 3.1% 43.7%;
-    --border: 45 22% 89%;
-    --accent: 15 63.1% 59.6%;
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 56.2% 45.4%;
+    /* Layer 3 (light) — semantic tokens, claude.ai's own naming. Nothing
+       below this line should ever hard-code a hex/hsl literal; it all
+       points back into the scale above. */
+    --bg-000: var(--_gray-0);
+    --bg-100: var(--_gray-20);
+    --bg-200: var(--_gray-40);
+    --bg-300: var(--_gray-60);
+    --bg-400: var(--_gray-90);
+    --bg-500: var(--_gray-150);
+    --text-000: var(--_gray-900);
+    --text-100: var(--_gray-900);
+    --text-200: var(--_gray-600);
+    --text-300: var(--_gray-500);
+    --text-400: var(--_gray-450);
+    --text-500: var(--_gray-450);
+    --border-100: var(--_gray-90);
+    --border-200: var(--_gray-100);
+    --border-300: var(--_gray-150);
+    --accent-brand: var(--_brand-clay-emphasized);
+    --accent-100: var(--_blue-500);
+    --danger-100: var(--_red-450);
+    --success-100: var(--_green-450);
+    --warning-100: var(--_yellow-450);
+
+    /* Layer 4 — the app's own aliases (what Tailwind's config reads).
+       Deliberately thin: each one names a *role* in this app and maps
+       straight onto a CDS semantic token above. */
+    --background: var(--bg-100);
+    --sidebar: var(--bg-100); /* same as background — thin border separates, not color */
+    --card: var(--bg-000);
+    --user-message: var(--bg-300); /* distinct surface for the user's chat bubble */
+    --foreground: var(--text-100);
+    --muted-foreground: var(--text-400);
+    --border: var(--border-100);
+    --accent: var(--accent-brand);
+    --accent-foreground: var(--always-white);
+    --destructive: var(--danger-100);
+    --success: var(--success-100);
+    --warning: var(--warning-100);
+    --info: var(--accent-100);
   }
 
   .dark {
-    /* Sourced directly from claude.ai's own dark-mode raw color scale
-       (gray-750/800/840/900 for surfaces, gray-0/200/350 for text) rather
-       than an approximation. Per instruction: --bg-100 is the background
-       for BOTH the chat area and the sidebar — they're the same color,
-       separated only by a thin border, exactly like the real app. */
-    --background: 60 2% 12%; /* gray-800 (bg-100) */
-    --sidebar: 60 2% 12%; /* same as background — hairline border does the separating */
-    --card: 60 3% 21%; /* gray-750 (bg-000) — slightly lighter, elevated surface (composer) */
-    --user-message: 60 3% 17%; /* bg-300 equivalent — between page bg and elevated surfaces */
-    --foreground: 0 0% 100%; /* gray-0 (text-000) */
-    --muted-foreground: 48 5% 57%; /* gray-350 (text-300) */
-    --border: 40 2% 26%; /* gray-650 — subtle, thin hairline between bg and text */
-    --accent: 15 63.1% 59.6%; /* accent-brand — consistent across both light/dark dumps */
-    --accent-foreground: 0 0% 100%;
-    --destructive: 0 73% 59%; /* red-400 */
+    /* Layer 3 (dark) — claude.ai's `[data-theme=claude][data-mode=dark]`
+       block, one-to-one. The exact greys the design brief called out:
+       page bg = gray-800 (#20201f), sidebar = gray-810 (#1e1e1d),
+       message/composer surface = gray-750 (#2c2c2a), body text =
+       gray-20 (#f9f9f7). */
+    --bg-000: var(--_gray-750);
+    --bg-100: var(--_gray-800);
+    --bg-200: var(--_gray-840);
+    --bg-300: var(--_gray-860);
+    --bg-400: var(--_gray-900);
+    --bg-500: var(--_gray-900);
+    --text-000: var(--_gray-20);
+    --text-100: var(--_gray-20);
+    --text-200: var(--_gray-200);
+    --text-300: var(--_gray-200);
+    --text-400: var(--_gray-350);
+    --text-500: var(--_gray-350);
+    /* claude.ai maps --border-* to gray-100 in dark and then only ever
+       paints it at very low alpha. This project uses `border-border` at
+       full strength in plenty of places, so the app-level --border below
+       stays on the dark end of the scale; --border-100 is kept faithful
+       for anything that wants the real token with its own alpha. */
+    --border-100: var(--_gray-100);
+    --border-200: var(--_gray-100);
+    --border-300: var(--_gray-100);
+    --accent-brand: var(--_brand-clay);
+    --accent-100: var(--_blue-350);
+    --danger-100: var(--_red-400);
+    --success-100: var(--_green-400);
+    --warning-100: var(--_yellow-200);
+
+    /* Layer 4 (dark) */
+    --background: var(--bg-100); /* gray-800 — #20201f */
+    --sidebar: var(--_gray-810); /* #1e1e1d — a hair darker than the page */
+    --card: var(--bg-000); /* gray-750 — #2c2c2a, the elevated message/composer box */
+    --user-message: var(--_gray-750); /* #2c2c2a — same surface as the composer */
+    --foreground: var(--text-100); /* gray-20 — #f9f9f7 */
+    --muted-foreground: var(--text-400); /* gray-350 */
+    --border: var(--_gray-650); /* subtle hairline; --border-100 keeps the real token */
+    --accent: var(--accent-brand);
+    --accent-foreground: var(--always-white);
+    --destructive: var(--danger-100);
+    --success: var(--success-100);
+    --warning: var(--warning-100);
+    --info: var(--accent-100);
   }
 
   * {

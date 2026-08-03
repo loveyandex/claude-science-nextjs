@@ -2,26 +2,45 @@
 
 A reference for keeping this project's UI consistent with claude.ai's actual design language,
 and for what's available if we reach for Radix Themes components later. Read this before making
-UI changes to `/chat`, `/chat-assist-ui`, `/library`, `/make-science`, `/recent`, or the
-`(auth)` login/signup pages.
+UI changes to `/chat`, `/chat-assist-ui`, `/library`, `/make-science`, `/make-science-gemma4`,
+`/make-embedding`, `/recent`, or the `(auth)` login/signup pages.
 
 ## Design tokens (source of truth: `src/app/globals.css`)
 
 All colors are CSS variables in HSL triplet form (`H S% L%`, no `hsl()` wrapper), consumed via
 Tailwind's `hsl(var(--x) / <alpha-value>)` pattern so every color utility supports opacity
-modifiers (`bg-background/50`, `border-border/60`, etc). Two token sets, swapped by the `.dark`
-class on `<html>` (via `next-themes`, `attribute="class"`):
+modifiers (`bg-background/50`, `border-border/60`, etc).
+
+**There are four layers, and you almost always want the fourth.** This structure is copied from
+claude.ai's own stylesheet rather than invented here:
+
+1. `--cds-hsl-*` — the raw CDS scale (`gray-0` … `gray-900`, `red-*`, `blue-*`, `clay`, …).
+   Mode-independent facts about the palette. **Never reference these from a component**, and
+   never redefine them per-theme.
+2. `--_gray-800`, `--_brand-clay`, … — private aliases; one indirection so a palette swap only
+   has to move this layer.
+3. `--bg-100`, `--text-400`, `--border-100`, `--accent-brand`, … — CDS *semantic* tokens,
+   redefined per mode. This is the layer that changes between light and dark.
+4. `--background`, `--card`, `--foreground`, … — this app's role names, each mapping onto a
+   layer-3 token. **This is what `tailwind.config.ts` reads and what components should use.**
+
+Adding a color means picking an existing layer-1 step and giving it a layer-4 role — not
+writing a new hex value.
+
+Two token sets, swapped by the `.dark` class on `<html>` (via `next-themes`, `attribute="class"`):
 
 | Token               | Light                  | Dark                        | Use                                                    |
 | ------------------- | ----------------------- | ---------------------------- | ------------------------------------------------------- |
-| `--background`      | `48 33.3% 97.1%`         | `60 2% 12%` (gray-800)          | Page background, chat viewport, sidebar (same as sidebar) |
-| `--sidebar`          | = `--background`          | = `--background`               | **Intentionally identical to `--background`.** Sidebars are separated by a thin border, never a different fill color — that's how claude.ai actually does it. |
-| `--card`            | `0 0% 100%` (white)       | `60 3% 21%` (gray-750)          | Elevated surfaces only: composer box, message bubbles that need to pop |
-| `--foreground`      | `60 2.6% 7.6%`            | `0 0% 100%`                    | Primary text |
-| `--muted-foreground` | `51 3.1% 43.7%`           | `48 5% 57%` (gray-350)          | Secondary text, metadata, placeholders |
-| `--border`           | `45 22% 89%`              | `40 2% 26%` (gray-650)          | **Always used at reduced opacity in practice** (`border-border/60`, `/70`) — never full-strength unless the border truly needs to stand out. This is what "thin sidebar border" means: it's opacity, not a 0.5px hack. |
-| `--accent`           | `15 63.1% 59.6%`          | `15 63.1% 59.6%`                | The terracotta brand color — same value in both modes, sourced from claude.ai's own `--accent-brand` |
-| `--destructive`      | `0 56.2% 45.4%`           | `0 73% 59%`                    | Errors only |
+| `--background`      | `--bg-100` (gray-20)     | `--bg-100` = gray-800, `#20201f` | Page background, chat viewport |
+| `--sidebar`          | = `--background`          | gray-810, `#1e1e1d`            | In light mode identical to `--background` (separated by a thin border, as claude.ai does it). In dark mode a hair darker, per the design brief. |
+| `--card`            | `--bg-000` (white)       | gray-750, `#2c2c2a`            | Elevated surfaces only: the composer/message box, cards that need to pop |
+| `--user-message`     | `--bg-300`               | gray-750, `#2c2c2a`            | The user's chat bubble — same surface as the composer |
+| `--foreground`      | gray-900                  | gray-20, `#f9f9f7`             | Primary text (`--text-100`) |
+| `--muted-foreground` | `--text-400`             | gray-350                       | Secondary text, metadata, placeholders |
+| `--border`           | gray-90                   | gray-650                       | **Usually used at reduced opacity** (`border-border/60`, `/70`). Note this deliberately diverges from CDS's own `--border-100` (gray-100, a *light* grey used at very low alpha in dark mode) — this project paints borders at full strength in enough places that the faithful token would glow. `--border-100` is still defined if you want it with your own alpha. |
+| `--accent`           | clay-emphasized           | clay (`#d97757`)               | The terracotta brand color, from CDS `--accent-brand` |
+| `--destructive`      | red-450                   | red-400                        | Errors only |
+| `--success` / `--warning` / `--info` | green/yellow/blue-450 | green-400 / yellow-200 / blue-350 | Status only — pipeline states on `/make-embedding`. Reach for these instead of raw Tailwind `text-green-500` etc. |
 
 Fonts: `--font-display` (Space Grotesk, headings outside chat), `--font-body` (Inter, UI chrome),
 `--font-serif` (Source Serif 4 — chat message text specifically, matching claude.ai's serif body
@@ -69,6 +88,10 @@ have a primitive for yet, these are the components to check first before hand-ro
   list-loading state. Reach for this rather than a spinner for anything that's fetching content
   with a known shape.
   https://www.radix-ui.com/themes/docs/components/skeleton
+- **Progress** — **implemented** as `src/components/ui/progress.tsx`, also hand-rolled. Pass
+  `value={null}` for the indeterminate variant: it's used on `/make-embedding` for a page whose
+  chunk count isn't known yet, where a 0% bar would wrongly read as "stuck". Prefer this over a
+  bare `<div style={{width}}>` so the ARIA attributes come along for free.
 - **Scroll Area** — custom-styled scrollable regions using native scroll behavior. We currently
   do this with a plain `.scrollbar-thin` utility class; Radix's version would be worth it if we
   need programmatic scroll control (e.g. virtualized chat history).

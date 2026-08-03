@@ -10,6 +10,38 @@ covering things that aren't obvious from the code alone (the Prisma config split
 tradeoffs, the message-persistence gotcha, the tool/agent-activity architecture, the design
 tokens). More on this in "Docs for whoever works on this next" below.
 
+## Semantic search over the library (`/make-embedding`)
+
+The library is now searchable by *meaning*, not just by keyword. A third pipeline takes the page
+markdown that `/make-science-gemma4` produced, splits it into overlapping ~500-token chunks, and
+embeds them into Qdrant; the chat agent gets a `searchLibrarySemantic` tool that queries it and
+comes back with the actual matching passages and their page numbers.
+
+Three properties are worth knowing before touching any of it:
+
+- **It's resumable at the chunk, not the page.** Every `ArticlePage` carries
+  `embeddingStatus`/`chunkCount`/`embeddedChunks`, so a run that's stopped (or that dies) picks
+  up at "page 7, chunk 12" rather than restarting the page. Chunking is a deterministic function
+  of `(text, chunk size, overlap)`, which is what makes a stored chunk *index* meaningful across
+  runs.
+- **Stopping is safe by construction.** The Python service is stateless — it's handed a batch of
+  pages plus their cursors and returns results. "Stop" means the Next.js orchestrator stops
+  sending batches; there's no job to cancel and nothing embedded is lost. The Stop button is
+  literally an `AbortController` on the browser's fetch.
+- **Stale vectors can't accumulate.** Each page's `contentHash` covers its text, the chunking
+  policy *and* the embedding model. Re-transcribe a page, change the chunk size, or switch
+  models and the hash stops matching, so those pages are re-embedded with their old vectors
+  deleted first. Anything new that rewrites `ArticlePage.content` must reset that page's
+  embedding fields too — `api/articles-gemma4/ingest-page` shows the pattern.
+
+Requires Qdrant running (`docker run -p 6333:6333 qdrant/qdrant`) and the `backend/` service,
+which is also where the embedding model lives. Embedding needs no API key — FastEmbed runs the
+model locally. Full details in `backend/README.md`.
+
+The `backend/` service was restructured into a layered package for this
+(`api/` → `services/` → `domain/`, with a `dependencies.py` composition root); `/index-article`
+keeps its exact previous contract.
+
 ## Bugfixes this pass (found by actually running the app — see note below)
 
 Three real bugs from the previous pass, all confirmed against a live `npm run build` /
@@ -134,6 +166,20 @@ cp .env.example .env   # fill in POSTGRES_URL, JWT_SECRET, and the rest — see 
 npx prisma migrate dev --name init   # creates the schema in your Postgres DB
 npm run dev
 ```
+
+The `/make-science-gemma4` and `/make-embedding` pages additionally need the Python service and,
+for embedding, a Qdrant instance — both separate processes, neither started by `npm run dev`:
+
+```bash
+docker run -p 6333:6333 -v qdrant_storage:/qdrant/storage qdrant/qdrant
+```
+
+```bash
+cd backend && pip install -r requirements.txt && uvicorn main:app --port 8000
+```
+
+See `backend/README.md` for Poppler (needed by the gemma4 pipeline only) and the full variable
+list. `INTERNAL_API_SECRET` must be identical in `.env` and `backend/.env`.
 
 Since you're on a real persistent database now (not the SQLite prototyping setup from before),
 `prisma migrate dev` (not `db push`) is the right command — it creates a proper migration

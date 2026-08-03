@@ -4,3 +4,8 @@ pdf2image==1.17.0
 cerebras-cloud-sdk==1.29.0
 httpx==0.28.1
 python-dotenv==1.0.1
+# Qdrant + local embedding for the make-embedding pipeline. The [fastembed]
+# extra is what lets QdrantClient.set_model()/add()/query() encode text
+# in-process — without it, add() raises about a missing model.
+qdrant-client[fastembed]>=1.14.2
+

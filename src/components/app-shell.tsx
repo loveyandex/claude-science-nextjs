@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings } from "lucide-react";
+import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings, Boxes } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { STAT_PAPERS_INDEXED } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -41,6 +41,12 @@ const NAV_ITEMS = [
     label: "Index (gemma4)",
     icon: ScanEye,
     isActive: (p: string) => p === "/make-science-gemma4",
+  },
+  {
+    href: "/make-embedding",
+    label: "Embed",
+    icon: Boxes,
+    isActive: (p: string) => p === "/make-embedding",
   },
 ];
 

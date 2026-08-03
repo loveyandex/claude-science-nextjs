@@ -3,6 +3,29 @@
 Read this before touching `src/lib/prisma.ts`, `src/lib/auth.ts`, any `src/app/api/**/route.ts`,
 or the `User`/`Chat`/`Article` models in `prisma/schema.prisma`.
 
+## The Python service owns no state; Next.js owns the database
+
+Both pipelines that need Python (`make-science-gemma4`, `make-embedding`) run in `backend/` and
+never open a database connection. They push results back over HTTP — `/api/articles-gemma4/
+ingest-page` and `/api/embeddings/ingest-progress`, both authenticated with the shared
+`X-Internal-Secret` rather than a user JWT (`checkInternalSecret()`, not
+`getAuthFromRequest()`). Keeping exactly one writer is what lets the browser watch a run by
+polling Postgres, instead of needing a second channel back out of Python.
+
+The corollary for `make-embedding`: **resume state is database state.** `ArticlePage` carries
+`embeddingStatus`/`chunkCount`/`embeddedChunks`/`contentHash`, and the Python service is handed
+a batch of pages plus their cursors on every call. So "stop a run" just means "stop sending
+batches" — there's no job to cancel, and nothing already embedded is lost. If you add a third
+pipeline, follow the same shape rather than giving Python its own database credentials.
+
+`contentHash` is the invariant that keeps Qdrant honest: it covers the page text, the chunking
+policy *and* the embedding model, so changing the chunk size, changing the model, or
+re-transcribing a page all make previously-embedded chunks stop matching, and those pages get
+re-embedded with their stale vectors deleted first. Anything that rewrites `ArticlePage.content`
+must also reset that page's embedding fields (see the re-transcription branch in
+`api/articles-gemma4/ingest-page/route.ts`) — otherwise the page stays marked `embedded`, never
+re-enters the queue, and Qdrant keeps serving text that no longer exists.
+
 ## Database: Prisma 7 + driver adapters (not the classic `DATABASE_URL` pattern)
 
 Prisma 7 removed the implicit "just set `DATABASE_URL` and go" connection model. Two separate
@@ -111,8 +134,10 @@ component in `/recent` could in principle be reused rather than rewritten per-en
 - `Article.status` is a plain `String` ("indexed" | "failed"), not a Postgres enum. This was kept
   as-is during the SQLite→Postgres migration specifically to avoid touching the indexing
   pipeline's business logic, which does plain string comparisons against it throughout.
-- `searchArticles` (the chat tool) does SQL `contains`, not semantic/vector search. Explicit
-  instruction to skip Qdrant/embeddings for now.
+- `searchArticles` (the chat tool) still does SQL `contains`, deliberately — it's the
+  exact-string fallback now that `searchLibrarySemantic` (Qdrant vector search over full page
+  text, via `src/lib/qdrant-search.ts`) is the default discovery tool. Don't "upgrade" it to
+  vector search; two different matching behaviours is the point.
 - `runPythonCode` is off by default (`ENABLE_PYTHON_TOOL`) and is **not sandboxed** beyond a
   timeout + output cap — see the comments in `src/lib/python-runner.ts` before ever turning it on
   outside a trusted single-user environment.

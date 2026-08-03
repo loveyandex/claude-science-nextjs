@@ -38,11 +38,42 @@ export async function POST(req: Request) {
     );
   }
 
+  // Re-transcribing a page invalidates whatever was embedded from its old
+  // text. Without this reset the page stays marked "embedded", never
+  // re-enters the make-embedding queue, and Qdrant keeps serving chunks of
+  // a version of the page that no longer exists. (The Python service also
+  // deletes a page's stale points when its content hash stops matching —
+  // but it only ever sees pages this queue hands it, so the reset has to
+  // happen here for that safeguard to get its chance.)
+  const existing = await prisma.articlePage.findUnique({
+    where: { articleId_pageNumber: { articleId: article.id, pageNumber } },
+    select: { content: true },
+  });
+  const contentChanged = existing !== null && existing.content !== content;
+
   await prisma.articlePage.upsert({
     where: { articleId_pageNumber: { articleId: article.id, pageNumber } },
     create: { articleId: article.id, pageNumber, content },
-    update: { content },
+    update: {
+      content,
+      ...(contentChanged
+        ? {
+            embeddingStatus: "pending",
+            chunkCount: 0,
+            embeddedChunks: 0,
+            contentHash: null,
+            embeddingError: null,
+            embeddedAt: null,
+          }
+        : {}),
+    },
   });
+
+  if (contentChanged) {
+    await prisma.article
+      .update({ where: { id: article.id }, data: { embeddingStatus: "partial", embeddedAt: null } })
+      .catch(() => {});
+  }
 
   if (typeof pageCount === "number") {
     await prisma.article.update({ where: { id: article.id }, data: { pageCount } }).catch(() => {});

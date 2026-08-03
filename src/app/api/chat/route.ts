@@ -4,6 +4,7 @@ import { getModel, isGemini3, type ModelId } from "@/lib/ai-provider";
 import { prisma } from "@/lib/prisma";
 import { extractPageText } from "@/lib/pdf";
 import { webSearch } from "@/lib/web-search";
+import { semanticSearchLibrary } from "@/lib/qdrant-search";
 import { runPythonCode } from "@/lib/python-runner";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 import { ensureMessageIds } from "@/lib/message-ids";
@@ -29,8 +30,15 @@ library of indexed papers (real PDFs whose first page has been read and summariz
 abstract records) plus some general-purpose tools.
 
 Local library tools:
-- searchArticles: keyword search across title/abstract. Only use a query when the person actually \
-gave you something to search for.
+- searchLibrarySemantic: **the default way to find papers on a topic.** Vector/similarity search \
+over the full text of every indexed page (not just titles and abstracts), so it finds work that \
+discusses an idea without using the person's exact words — and it returns the actual matching \
+passages with page numbers, so you can quote real text rather than paraphrasing an abstract. Pass \
+the scientific concept the person is actually asking about, phrased as a short descriptive query \
+("stochastic gradient descent convergence bounds"), not their whole message verbatim.
+- searchArticles: keyword search across title/abstract only. Use it when the person names an \
+exact string — an author, a title, a specific term they want matched literally — or as a fallback \
+when searchLibrarySemantic reports that the library hasn't been embedded yet.
 - listRecentArticles: no keyword needed — most recently indexed papers. Use for "what's in the \
 library" / broad discovery instead of forcing a keyword search.
 - getLibraryStats: no arguments — indexed/failed counts and most recent indexing activity.
@@ -57,8 +65,8 @@ through them one tool call at a time rather than trying to do everything in one 
 If a search comes back empty, try a different, more general query once before concluding nothing \
 is indexed on the topic — don't call the same tool with the same or an empty query repeatedly. \
 When you use results from a paper, mention its title naturally in your answer so the person knows \
-where the claim came from. If nothing relevant is found anywhere, say so plainly rather than \
-making something up.`;
+where the claim came from, and cite the page number when the claim came from a specific passage. \
+If nothing relevant is found anywhere, say so plainly rather than making something up.`;
 
 export async function POST(req: Request) {
   const auth = await getAuthFromRequest(req);
@@ -111,6 +119,41 @@ export async function POST(req: Request) {
         }
       : undefined,
     tools: {
+      searchLibrarySemantic: tool({
+        description:
+          "Semantic (vector) search over the full text of every embedded page in the local library. Finds papers by meaning rather than exact wording, and returns the actual matching passages with their page numbers. This is the preferred way to find papers on a topic; use searchArticles instead only for exact-string lookups.",
+        inputSchema: z.object({
+          query: z
+            .string()
+            .min(1)
+            .describe(
+              "The scientific concept to search for, as a short descriptive phrase — not the person's whole message."
+            ),
+          limit: z
+            .number()
+            .int()
+            .min(1)
+            .max(10)
+            .optional()
+            .describe("Max number of distinct articles to return (default 5)."),
+        }),
+        execute: async ({ query, limit }) => {
+          const result = await semanticSearchLibrary(query, limit ?? 5);
+          if (!result.ok) {
+            // Handed back as a readable result rather than thrown, so the
+            // model can fall back to keyword search in the same turn.
+            return {
+              query: result.query,
+              count: 0,
+              results: [],
+              error: result.error,
+              hint: "Semantic search is unavailable right now — try searchArticles (keyword) instead.",
+            };
+          }
+          return { query: result.query, count: result.count, results: result.results };
+        },
+      }),
+
       searchArticles: tool({
         description:
           "Search the indexed article library by keyword across title and abstract. Use this only when the person gave an actual topic/keyword to search for.",

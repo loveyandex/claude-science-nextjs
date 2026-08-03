@@ -24,6 +24,12 @@ model Article {
   // pipeline and not the other — see make-science-gemma4.
   gemmaStatus String? // null (not run) | "partial" | "indexed" | "failed"
   gemmaError  String?
+  // Rolled-up view of this article's per-page embedding state, derived from
+  // its ArticlePage rows after every embedding batch. Purely a read
+  // optimization for /library and /make-embedding's stat cards — the
+  // authoritative, resumable state lives on ArticlePage.
+  embeddingStatus String? // null (not run) | "partial" | "embedded" | "failed"
+  embeddedAt      DateTime?
   createdAt   DateTime      @default(now())
   pages       ArticlePage[]
 }
@@ -41,7 +47,32 @@ model ArticlePage {
   content    String // markdown transcription from Gemma
   createdAt  DateTime @default(now())
 
+  // --- Qdrant embedding state (make-embedding pipeline) -----------------
+  // A page is too big to embed as one vector, so it's split into
+  // deterministic ~N-token chunks (see backend/app/services/chunking.py).
+  // Chunking is a pure function of (content, chunkTokens, chunkOverlap),
+  // so chunk *index* is stable across runs — which is what makes
+  // "resume this page from chunk 7" correct rather than approximate.
+  //
+  // embeddingStatus: "pending" (never embedded) | "partial" (some chunks
+  // in Qdrant, stopped/failed midway) | "embedded" | "failed".
+  embeddingStatus String  @default("pending")
+  // Total chunks this page splits into. 0 until the first run computes it.
+  chunkCount      Int     @default(0)
+  // How many of those chunks are confirmed upserted into Qdrant. The
+  // resume cursor: the next run starts this page at chunk #embeddedChunks.
+  embeddedChunks  Int     @default(0)
+  // sha256 of the content that was chunked, plus the chunk params baked in.
+  // If a page is re-transcribed (or the chunk size changes), this stops
+  // matching and the page is re-embedded from chunk 0 instead of silently
+  // leaving stale vectors behind.
+  contentHash     String?
+  embeddingModel  String?
+  embeddingError  String?
+  embeddedAt      DateTime?
+
   @@unique([articleId, pageNumber])
+  @@index([embeddingStatus])
 }
 
 // A pool of Cerebras API keys usable by the make-science-gemma4 pipeline —
@@ -67,6 +98,21 @@ model AppSettings {
   // "pdfs_per_key": up to N articles processed concurrently (N = enabled
   // key count), each assigned exactly one key, pages sequential per article.
   gemma4ConcurrencyMode String @default("pages_per_pdf")
+
+  // --- make-embedding (Qdrant) -----------------------------------------
+  // Kept here rather than in .env because changing chunk size changes how
+  // every page is split, which has to invalidate ArticlePage.contentHash —
+  // a database-visible decision, not a deployment detail. The Python
+  // service is told these values per request and holds no opinion itself.
+  embeddingCollection  String @default("fastembed_articles")
+  embeddingModel       String @default("BAAI/bge-small-en")
+  embeddingChunkTokens Int    @default(500)
+  // Chunks overlap slightly so a sentence split across a boundary is still
+  // retrievable from at least one whole-sentence chunk.
+  embeddingChunkOverlap Int   @default(60)
+  // How many pages are handed to the Python service in one call. Bigger =
+  // fewer round trips, but coarser stop granularity.
+  embeddingPageBatch    Int   @default(8)
 }
 
 model User {
