@@ -7,5 +7,5 @@ python-dotenv==1.0.1
 # Qdrant + local embedding for the make-embedding pipeline. The [fastembed]
 # extra is what lets QdrantClient.set_model()/add()/query() encode text
 # in-process — without it, add() raises about a missing model.
-qdrant-client[fastembed]>=1.14.2
+qdrant-client[fastembed]==1.15.1
 

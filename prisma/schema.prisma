@@ -115,6 +115,41 @@ model AppSettings {
   embeddingPageBatch    Int   @default(8)
 }
 
+// A configured AI provider instance (not a fixed enum) — two rows can both
+// be type "openai-compatible" (e.g. a local Ollama box and a remote Groq
+// key are unrelated instances of the same wire protocol), so baseUrl/apiKey
+// live per-row rather than per-type. Managed from /settings, same
+// global/app-wide shape as CerebrasApiKey above (no per-user scoping).
+model AiProvider {
+  id        String   @id @default(cuid())
+  type      String   // "openai-compatible" | "google"
+  label     String   // e.g. "Ollama (local)", "Groq"
+  baseUrl   String?  // required for "openai-compatible"; unused for "google"
+  apiKey    String?  // nullable — many local openai-compatible servers need no key
+  enabled   Boolean  @default(true)
+  source    String   @default("manual") // "manual" | "env" — same convention as CerebrasApiKey.source
+  createdAt DateTime @default(now())
+  models    AiProviderModel[]
+}
+
+// One selectable chat model under a provider. `wireId` is what the client
+// sends as `model` in /api/chat's request body and what's persisted on
+// Chat.model — once created it must stay stable, since old Chat rows
+// reference it by value indefinitely (see ai-provider.ts's getModel()
+// fallback for what happens when a wireId no longer resolves).
+model AiProviderModel {
+  id         String     @id @default(cuid())
+  providerId String
+  provider   AiProvider @relation(fields: [providerId], references: [id], onDelete: Cascade)
+  wireId     String     @unique // e.g. "gpt-oss", "gemini-flash-lite", or a cuid for user-added models
+  modelName  String     // actual model name sent to the provider API, e.g. "llama3.1:8b"
+  label      String?    // optional display override; falls back to modelName
+  enabled    Boolean    @default(true)
+  createdAt  DateTime   @default(now())
+
+  @@index([providerId])
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique

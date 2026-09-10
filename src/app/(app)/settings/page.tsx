@@ -1,21 +1,24 @@
 "use client";
 
 import { useState } from "react";
-import { ScanEye, Settings as SettingsIcon } from "lucide-react";
+import { Cpu, ScanEye, Settings as SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Gemma4SettingsPanel } from "@/components/settings/gemma4-settings-panel";
+import { AiProvidersSettingsPanel } from "@/components/settings/ai-providers-settings-panel";
 
-// Only one section exists today (gemma4 indexing), but this is built as a
-// real sidebar-of-sections rather than a single panel so future settings
-// (e.g. other pipelines/providers) have somewhere to go without a rework.
+// Built as a real sidebar-of-sections rather than a single panel so future
+// settings (e.g. other pipelines/providers) have somewhere to go without a
+// rework — "AI Providers" below is the first section that actually needed
+// that room.
 const SECTIONS = [
+  { id: "ai-providers", label: "AI Providers", icon: Cpu },
   { id: "indexing-by-gemma", label: "Indexing · gemma4", icon: ScanEye },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
 
 export default function SettingsPage() {
-  const [active, setActive] = useState<SectionId>("indexing-by-gemma");
+  const [active, setActive] = useState<SectionId>("ai-providers");
 
   return (
     <div className="h-full min-h-0 flex">
@@ -49,6 +52,7 @@ export default function SettingsPage() {
 
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
         <div className="max-w-2xl mx-auto w-full px-4 md:px-8 py-6">
+          {active === "ai-providers" && <AiProvidersSettingsPanel />}
           {active === "indexing-by-gemma" && <Gemma4SettingsPanel />}
         </div>
       </div>

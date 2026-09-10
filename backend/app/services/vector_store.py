@@ -67,7 +67,7 @@ class QdrantVectorStore:
                     client.set_model(self._model_name)
                 except Exception as err:  # noqa: BLE001 — surfaced as a domain error
                     raise VectorStoreError(
-                        f"Couldn't connect to Qdrant at {self._url} with model "
+                        f"Couldn't Xconnect to Qdrant at {self._url} with model "
                         f"'{self._model_name}': {err}"
                     ) from err
                 self._client = client

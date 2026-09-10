@@ -1,6 +1,6 @@
 import { streamText, convertToModelMessages, stepCountIs, tool, type UIMessage } from "ai";
 import { z } from "zod";
-import { getModel, isGemini3, type ModelId } from "@/lib/ai-provider";
+import { getModel } from "@/lib/ai-provider";
 import { prisma } from "@/lib/prisma";
 import { extractPageText } from "@/lib/pdf";
 import { webSearch } from "@/lib/web-search";
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
   const body = await req.json();
   const { messages, model: modelId, thinking, chatId }: {
     messages: UIMessage[];
-    model?: ModelId;
+    model?: string;
     thinking?: boolean;
     chatId: string;
   } = body;
@@ -92,7 +92,7 @@ export async function POST(req: Request) {
   }
 
   const modelMessages = await convertToModelMessages(messages);
-  const model = getModel(modelId);
+  const { model, providerType, modelName } = await getModel(modelId);
 
   const result = streamText({
     model,
@@ -100,24 +100,26 @@ export async function POST(req: Request) {
     messages: modelMessages,
     stopWhen: stepCountIs(8),
     // Best-effort "thinking mode": Gemini supports this natively via
-    // thinkingConfig; other providers ignore unknown providerOptions
-    // namespaces rather than erroring, so this is safe to always pass.
-    // Gemini 3.x models (e.g. gemini-3.1-flash-lite) control reasoning
-    // depth via thinkingLevel, not the thinkingBudget token count used by
-    // 2.x models — without it, includeThoughts alone doesn't turn thinking
-    // on for 3.x and the model just streams a plain answer.
-    providerOptions: thinking
-      ? {
-          google: {
-            thinkingConfig: {
-              includeThoughts: true,
-              ...(isGemini3(modelId)
-                ? { thinkingLevel: "high" }
-                : { thinkingBudget: -1 }),
+    // thinkingConfig, so it's only attached when the resolved model's
+    // provider is actually "google" — other providers get no
+    // providerOptions rather than relying on them to ignore an unknown
+    // namespace. Gemini 3.x models (e.g. gemini-3.1-flash-lite) control
+    // reasoning depth via thinkingLevel, not the thinkingBudget token count
+    // used by 2.x models — without it, includeThoughts alone doesn't turn
+    // thinking on for 3.x and the model just streams a plain answer.
+    providerOptions:
+      thinking && providerType === "google"
+        ? {
+            google: {
+              thinkingConfig: {
+                includeThoughts: true,
+                ...(modelName.startsWith("gemini-3")
+                  ? { thinkingLevel: "high" }
+                  : { thinkingBudget: -1 }),
+              },
             },
-          },
-        }
-      : undefined,
+          }
+        : undefined,
     tools: {
       searchLibrarySemantic: tool({
         description:
@@ -412,6 +414,7 @@ function extractFirstUserText(messages: UIMessage[]): string | null {
 }
 
 export async function GET() {
-  const { MODEL_OPTIONS } = await import("@/lib/ai-provider");
-  return Response.json({ models: MODEL_OPTIONS, pythonToolEnabled: PYTHON_TOOL_ENABLED });
+  const { listChatModels } = await import("@/lib/ai-providers-settings");
+  const models = await listChatModels();
+  return Response.json({ models, pythonToolEnabled: PYTHON_TOOL_ENABLED });
 }

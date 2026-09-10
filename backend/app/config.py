@@ -68,7 +68,7 @@ class Settings:
     def from_env() -> "Settings":
         return Settings(
             internal_api_secret=_str_env("INTERNAL_API_SECRET"),
-            nextjs_base_url=_str_env("NEXTJS_BASE_URL", "http://localhost:3000").rstrip("/"),
+            nextjs_base_url=_str_env("NEXTJS_BASE_URL", "http://localhost:7007").rstrip("/"),
             fallback_cerebras_api_key=_str_env("CEREBRAS_API_KEY"),
             gemma_model=_str_env("GEMMA_MODEL_NAME", "gemma-4-31b"),
             pdf_dpi=_int_env("PDF_RENDER_DPI", 400),

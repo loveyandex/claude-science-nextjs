@@ -16,7 +16,7 @@ This skill describes how an AI agent can test the AI chat route (`/api/chat`). T
 To simulate a user message and see the streamed AI response (including tool calls if the query matches indexed papers), execute:
 
 ```bash
-curl -X POST -H "Content-Type: application/json" -d "{\"messages\": [{\"role\": \"user\", \"content\": \"What papers do we have on CRISPR?\"}]}" http://localhost:3000/api/chat
+curl -X POST -H "Content-Type: application/json" -d "{\"messages\": [{\"role\": \"user\", \"content\": \"What papers do we have on CRISPR?\"}]}" http://localhost:7007/api/chat
 ```
 
 If the database has papers indexed on the topic, the agent will call the `searchArticles` tool, query SQLite, and use the results to construct its final answer. The streamed response will contain the tool execution log and final message chunks.
