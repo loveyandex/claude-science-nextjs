@@ -22,7 +22,14 @@ function buildClientModel(
   modelName: string
 ): LanguageModel {
   if (provider.type === "google") {
-    const google = createGoogleGenerativeAI({ apiKey: provider.apiKey ?? undefined });
+    // baseURL is optional here — omitting it falls back to the AI SDK's
+    // own default (https://generativelanguage.googleapis.com/v1beta), but
+    // a user-set one lets this point at a proxy or a Vertex-compatible
+    // gateway instead of Google's public endpoint directly.
+    const google = createGoogleGenerativeAI({
+      apiKey: provider.apiKey ?? undefined,
+      baseURL: provider.baseUrl || undefined,
+    });
     return google(modelName);
   }
   // "openai-compatible" (and any unrecognized type, defensively) — baseUrl

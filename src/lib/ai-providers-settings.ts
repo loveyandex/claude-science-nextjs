@@ -149,7 +149,8 @@ export async function discoverModels(provider: {
 
     if (provider.type === "google") {
       if (!provider.apiKey) return { ok: false, error: "This provider has no API key configured." };
-      const url = `https://generativelanguage.googleapis.com/v1beta/models?key=${encodeURIComponent(provider.apiKey)}`;
+      const base = (provider.baseUrl || "https://generativelanguage.googleapis.com/v1beta").replace(/\/+$/, "");
+      const url = `${base}/models?key=${encodeURIComponent(provider.apiKey)}`;
       const res = await fetch(url, { signal: AbortSignal.timeout(5000) });
       if (!res.ok) return { ok: false, error: `Provider returned ${res.status} ${res.statusText}.` };
       const json = await res.json().catch(() => null);

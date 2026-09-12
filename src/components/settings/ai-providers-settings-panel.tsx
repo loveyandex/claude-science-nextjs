@@ -109,7 +109,7 @@ export function AiProvidersSettingsPanel() {
         body: JSON.stringify({
           type: newType,
           label: newLabel.trim(),
-          baseUrl: newType === "openai-compatible" ? newBaseUrl.trim() : undefined,
+          baseUrl: newBaseUrl.trim() || undefined,
           apiKey: newApiKey.trim() || undefined,
         }),
       });
@@ -221,15 +221,17 @@ export function AiProvidersSettingsPanel() {
             />
           </div>
           <div className="flex items-center gap-2 flex-wrap">
-            {newType === "openai-compatible" && (
-              <Input
-                placeholder="base URL, e.g. http://localhost:11434/v1"
-                value={newBaseUrl}
-                onChange={(e) => setNewBaseUrl(e.target.value)}
-                className="flex-1 min-w-[240px] font-mono"
-                disabled={adding}
-              />
-            )}
+            <Input
+              placeholder={
+                newType === "openai-compatible"
+                  ? "base URL, e.g. http://localhost:11434/v1"
+                  : "base URL (optional — defaults to generativelanguage.googleapis.com/v1beta)"
+              }
+              value={newBaseUrl}
+              onChange={(e) => setNewBaseUrl(e.target.value)}
+              className="flex-1 min-w-[240px] font-mono"
+              disabled={adding}
+            />
             <Input
               placeholder="API key (optional for local Ollama)"
               value={newApiKey}
@@ -310,9 +312,97 @@ function ProviderCard({
       </div>
 
       {isExpanded && (
-        <ProviderModels provider={provider} authFetch={authFetch} onChanged={onModelsChanged} />
+        <div className="mt-3 space-y-3 border-t border-border pt-3">
+          <ProviderBaseUrl provider={provider} authFetch={authFetch} onChanged={onModelsChanged} />
+          <ProviderModels provider={provider} authFetch={authFetch} onChanged={onModelsChanged} />
+        </div>
       )}
     </Card>
+  );
+}
+
+/**
+ * Inline-editable base URL — every provider type can have one (Google
+ * defaults to generativelanguage.googleapis.com/v1beta when unset, but a
+ * user may want to point it at a proxy or Vertex-compatible gateway
+ * instead), so this isn't gated to just "openai-compatible".
+ */
+function ProviderBaseUrl({
+  provider,
+  authFetch,
+  onChanged,
+}: {
+  provider: ProviderRow;
+  authFetch: (input: RequestInfo, init?: RequestInit) => Promise<Response>;
+  onChanged: () => void;
+}) {
+  const [editing, setEditing] = useState(false);
+  const [value, setValue] = useState(provider.baseUrl ?? "");
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  const defaultPlaceholder =
+    provider.type === "google"
+      ? "default: generativelanguage.googleapis.com/v1beta"
+      : "base URL, e.g. http://localhost:11434/v1";
+
+  const save = async () => {
+    setSaving(true);
+    setError(null);
+    try {
+      const res = await authFetch(`/api/settings/ai-providers/providers/${provider.id}`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ baseUrl: value.trim() }),
+      });
+      if (!res.ok) throw new Error("Failed to update base URL");
+      setEditing(false);
+      onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Failed to update base URL");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  if (!editing) {
+    return (
+      <div className="flex items-center gap-2 text-[12px]">
+        <span className="text-muted-foreground">Base URL:</span>
+        <span className="font-mono text-foreground/90">{provider.baseUrl || "default"}</span>
+        <Button variant="ghost" size="sm" onClick={() => setEditing(true)} className="h-6 px-2 text-[11px]">
+          Edit
+        </Button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="flex items-center gap-2 flex-wrap">
+      <Input
+        placeholder={defaultPlaceholder}
+        value={value}
+        onChange={(e) => setValue(e.target.value)}
+        className="flex-1 min-w-[240px] font-mono"
+        disabled={saving}
+      />
+      <Button size="sm" onClick={save} disabled={saving}>
+        {saving ? <Loader2 size={13} className="animate-spin" /> : "Save"}
+      </Button>
+      <Button
+        variant="ghost"
+        size="sm"
+        onClick={() => {
+          setEditing(false);
+          setValue(provider.baseUrl ?? "");
+          setError(null);
+        }}
+        disabled={saving}
+      >
+        Cancel
+      </Button>
+      {error && <p className="w-full text-[12px] text-destructive">{error}</p>}
+    </div>
   );
 }
 
@@ -426,7 +516,7 @@ function ProviderModels({
   };
 
   return (
-    <div className="mt-3 pl-6 space-y-3 border-t border-border pt-3">
+    <div className="pl-6 space-y-3">
       <div className="space-y-1.5">
         {provider.models.length === 0 && (
           <p className="font-mono text-[11px] text-muted-foreground">No models yet.</p>
