@@ -3,16 +3,18 @@
 /**
  * Renders the "agent working" flow — interleaved reasoning + tool calls
  * that happen before (and sometimes between) the final answer text — as a
- * single connected, compact timeline distinct from the main response
- * copy. Consecutive reasoning/tool-call parts are coalesced via
- * assistant-ui's `groupPartByType` + `MessagePrimitive.GroupedParts` into
- * one bordered "thought" rail; the final text part renders normally,
- * outside the rail, at full size.
+ * plain, compact list of short step lines (no bordered box/card), the
+ * same look chat UIs like Grok use: a small "Worked for Ns" caption you
+ * can collapse, with each reasoning/tool-call step as one short muted
+ * line above the actual answer. Consecutive reasoning/tool-call parts are
+ * coalesced via assistant-ui's `groupPartByType` +
+ * `MessagePrimitive.GroupedParts`; the final text part renders normally,
+ * outside the step list, at full size.
  */
 
 import { useEffect, useRef, useState } from "react";
 import { groupPartByType, MessagePrimitive, useMessage, type EnrichedPartState } from "@assistant-ui/react";
-import { Brain, ChevronDown, Loader2 } from "lucide-react";
+import { ChevronDown, Lightbulb, Loader2 } from "lucide-react";
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { ToolFallback } from "@/components/assistant-ui/tool-call";
 import { ThinkingIndicator } from "@/components/assistant-ui/thinking-indicator";
@@ -48,21 +50,29 @@ export function StepFlowParts() {
   );
 }
 
+/** Cuts to a short single line at a word boundary — the step list reads as
+ *  a table of contents, not a transcript, so a full paragraph doesn't belong here. */
+function truncate(text: string, max = 100): string {
+  const clean = text.trim().replace(/\s+/g, " ");
+  if (clean.length <= max) return clean;
+  return clean.slice(0, max).replace(/\s+\S*$/, "") + "…";
+}
+
 /**
  * The whole "thought" block — reasoning + tool calls before the final
- * answer — collapses into one "Thought for Ns" summary once finished, the
- * same pattern chat UIs like Grok/ChatGPT use so a long chain of internal
- * monologue and tool calls doesn't sit permanently in the way of the
- * actual answer. Starts expanded (to show live progress) only if it's
- * still running the first time it mounts; a message loaded already-done
- * (e.g. from history) starts collapsed.
+ * answer — collapses into one plain "Worked for Ns" caption once
+ * finished, the same pattern chat UIs like Grok/ChatGPT use so a long
+ * chain of internal monologue and tool calls doesn't sit permanently in
+ * the way of the actual answer. Starts expanded (to show live progress)
+ * only if it's still running the first time it mounts; a message loaded
+ * already-done (e.g. from history) starts collapsed.
  *
  * "Running" here is the whole assistant message's status, not this one
  * group's last part — a multi-step tool-calling turn has real gaps
  * between one tool result landing and the next reasoning token starting
  * (each step is its own LLM round trip), during which the group's own
  * last-known part briefly reads as "complete". Using message-level status
- * avoids the header flickering to "done" mid-turn during those gaps.
+ * avoids the caption flickering to "done" mid-turn during those gaps.
  */
 function ThoughtRail({ children }: { children: React.ReactNode }) {
   const isRunning = useMessage((m) => m.status?.type === "running");
@@ -77,57 +87,37 @@ function ThoughtRail({ children }: { children: React.ReactNode }) {
   }, [isRunning, elapsedMs]);
 
   const seconds = elapsedMs !== null ? Math.max(1, Math.round(elapsedMs / 1000)) : null;
-  const summary = isRunning ? "Working" : seconds !== null ? `Thought for ${seconds}s` : "Thought";
+  const summary = isRunning ? "Working" : seconds !== null ? `Worked for ${seconds}s` : "Worked";
 
   return (
-    <div className="my-1.5 rounded-lg border border-border/50 bg-foreground/[0.02]">
+    <div className="my-1">
       <button
         onClick={() => setCollapsed((c) => !c)}
-        className="flex w-full items-center gap-1.5 px-3 py-1.5 text-left font-mono text-[10px] uppercase tracking-wide text-muted-foreground/70 transition-colors hover:text-muted-foreground"
+        className="flex items-center gap-1.5 py-0.5 text-left text-[12.5px] text-muted-foreground transition-colors hover:text-foreground"
       >
-        {isRunning ? (
-          <Loader2 size={11} className="animate-spin text-accent" />
-        ) : (
-          <Brain size={11} />
-        )}
+        {isRunning && <Loader2 size={12} className="animate-spin text-accent" />}
         {summary}
         <ChevronDown
-          size={12}
-          className={`ml-auto shrink-0 transition-transform ${collapsed ? "-rotate-90" : ""}`}
+          size={13}
+          className={`shrink-0 transition-transform ${collapsed ? "-rotate-90" : ""}`}
         />
       </button>
-      {!collapsed && <div className="space-y-0.5 px-3 pb-2">{children}</div>}
+      {!collapsed && <div className="space-y-0.5 pb-1">{children}</div>}
     </div>
   );
-}
-
-/**
- * A raw reasoning chunk is usually a full paragraph of internal monologue
- * ("The user asks X. We should do Y..."). Bolding just its first sentence
- * as a headline (rest stays normal, muted, continuing inline) gives it the
- * same scan-at-a-glance shape as a step list, without needing the model to
- * emit short step titles itself.
- */
-function splitLead(text: string): [string, string] {
-  const match = text.match(/^(.{1,160}?[.!?])(\s+)([\s\S]+)$/);
-  if (!match) return [text, ""];
-  return [match[1], match[3]];
 }
 
 function ReasoningRow({ part }: { part: EnrichedPartState & { type: "reasoning"; text: string } }) {
   const isRunning = part.status?.type === "running";
   const text = part.text || (isRunning ? "Thinking…" : "");
-  const [lead, rest] = splitLead(text);
 
   return (
-    <div className="flex items-start gap-2 py-1 text-[12.5px]">
-      <span
-        className={`mt-1 size-1.5 shrink-0 rounded-full ${isRunning ? "animate-pulse bg-accent" : "bg-muted-foreground/40"}`}
+    <div className="flex items-center gap-2 py-0.5 text-[12.5px] text-muted-foreground">
+      <Lightbulb
+        size={13}
+        className={`shrink-0 ${isRunning ? "animate-pulse text-accent" : "text-muted-foreground/70"}`}
       />
-      <p className="leading-relaxed">
-        <span className={isRunning ? "text-foreground" : "text-foreground/90 font-medium"}>{lead}</span>
-        {rest && <span className="text-muted-foreground"> {rest}</span>}
-      </p>
+      <span className="truncate">{truncate(text)}</span>
     </div>
   );
 }

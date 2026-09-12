@@ -1,8 +1,9 @@
 "use client";
 
+import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings, Boxes } from "lucide-react";
+import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings, Boxes, Menu, X } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { STAT_PAPERS_INDEXED } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -133,8 +134,67 @@ export function AppShell({ children }: { children: React.ReactNode }) {
             </div>
           </div>
 
-          {/* mobile nav */}
-          <nav className="flex md:hidden bg-sidebar rounded-lg p-0.5">
+          <div className="flex items-center gap-2">
+            <div className="hidden md:flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
+              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
+              {user?.email ?? "indexed & grounded locally"}
+            </div>
+            <ThemeToggle />
+            <MobileNav pathname={pathname} email={user?.email} logout={logout} />
+          </div>
+        </header>
+
+        <main className="flex-1 min-h-0">{children}</main>
+      </div>
+    </div>
+  );
+}
+
+/**
+ * Below md (768px) the icon rail (`aside`, `hidden md:flex`) is gone, so
+ * every destination it carries — the 6 NAV_ITEMS plus Recent/Settings/
+ * Logout, previously scattered across separate always-visible icon
+ * buttons that quietly overflowed the header on narrow viewports — has to
+ * live somewhere. This consolidates all of it into one hamburger-triggered
+ * dropdown instead, so the header itself never grows wider than the
+ * viewport regardless of how many nav items exist.
+ */
+function MobileNav({
+  pathname,
+  email,
+  logout,
+}: {
+  pathname: string;
+  email: string | undefined;
+  logout: () => void;
+}) {
+  const [open, setOpen] = useState(false);
+
+  const close = () => setOpen(false);
+
+  return (
+    <div className="md:hidden">
+      <button
+        onClick={() => setOpen((o) => !o)}
+        className="w-8 h-8 rounded-md flex items-center justify-center text-muted-foreground hover:bg-border/50 hover:text-foreground transition-colors"
+        aria-label={open ? "Close menu" : "Open menu"}
+        aria-expanded={open}
+      >
+        {open ? <X size={18} /> : <Menu size={18} />}
+      </button>
+
+      {open && (
+        <>
+          {/* Backdrop — click to dismiss, sits under the panel but above page content. */}
+          <div className="fixed inset-0 z-40 animate-fade-in" onClick={close} />
+          <nav className="absolute right-2 top-14 z-50 w-64 max-w-[85vw] rounded-lg border border-border/60 bg-card p-1.5 shadow-md animate-slide-up">
+            {email && (
+              <div className="flex items-center gap-2 px-2.5 py-2 mb-1 border-b border-border font-mono text-[11px] text-muted-foreground">
+                <span className="w-1.5 h-1.5 rounded-full bg-accent shrink-0" />
+                <span className="truncate">{email}</span>
+              </div>
+            )}
+
             {NAV_ITEMS.map((item) => {
               const active = item.isActive(pathname);
               const Icon = item.icon;
@@ -142,54 +202,61 @@ export function AppShell({ children }: { children: React.ReactNode }) {
                 <Link
                   key={item.href}
                   href={item.href}
+                  onClick={close}
                   className={cn(
-                    "flex items-center gap-1 px-2.5 py-1.5 rounded-md font-mono text-[11px] transition-colors",
-                    active ? "bg-card text-foreground" : "text-muted-foreground"
+                    "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] transition-colors",
+                    active
+                      ? "bg-accent text-accent-foreground"
+                      : "text-foreground hover:bg-border/50"
                   )}
                 >
-                  <Icon size={12} /> {item.label}
+                  <Icon size={15} className="shrink-0" />
+                  {item.label}
                 </Link>
               );
             })}
+
+            <div className="my-1 border-t border-border" />
+
             <Link
               href="/recent"
+              onClick={close}
               className={cn(
-                "flex items-center gap-1 px-2.5 py-1.5 rounded-md font-mono text-[11px] transition-colors",
-                pathname.startsWith("/recent") ? "bg-card text-foreground" : "text-muted-foreground"
+                "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] transition-colors",
+                pathname.startsWith("/recent")
+                  ? "bg-accent text-accent-foreground"
+                  : "text-foreground hover:bg-border/50"
               )}
             >
-              <Search size={12} />
+              <Search size={15} className="shrink-0" />
+              Recent chats
             </Link>
-          </nav>
-
-          <div className="flex items-center gap-4">
-            <div className="hidden md:flex items-center gap-2 font-mono text-[11px] text-muted-foreground">
-              <span className="w-1.5 h-1.5 rounded-full bg-accent" />
-              {user?.email ?? "indexed & grounded locally"}
-            </div>
             <Link
               href="/settings"
+              onClick={close}
               className={cn(
-                "md:hidden transition-colors",
-                pathname.startsWith("/settings") ? "text-accent" : "text-muted-foreground"
+                "flex items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] transition-colors",
+                pathname.startsWith("/settings")
+                  ? "bg-accent text-accent-foreground"
+                  : "text-foreground hover:bg-border/50"
               )}
-              title="Settings"
             >
-              <Settings size={15} />
+              <Settings size={15} className="shrink-0" />
+              Settings
             </Link>
             <button
-              onClick={logout}
-              className="md:hidden text-muted-foreground hover:text-destructive transition-colors"
-              title="Log out"
+              onClick={() => {
+                close();
+                logout();
+              }}
+              className="flex w-full items-center gap-2.5 px-2.5 py-2 rounded-md text-[13px] text-muted-foreground hover:bg-destructive/10 hover:text-destructive transition-colors"
             >
-              <LogOut size={15} />
+              <LogOut size={15} className="shrink-0" />
+              Log out
             </button>
-            <ThemeToggle />
-          </div>
-        </header>
-
-        <main className="flex-1 min-h-0">{children}</main>
-      </div>
+          </nav>
+        </>
+      )}
     </div>
   );
 }

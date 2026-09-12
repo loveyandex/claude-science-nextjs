@@ -170,35 +170,31 @@ export function ToolFallback({ toolName, args, argsText, result, isError }: Tool
     result !== undefined || (toolName === "runPythonCode" && typeof args?.code === "string" && args.code);
 
   return (
-    <div className="my-1.5 rounded-md border border-border/50 bg-foreground/[0.015] font-body">
+    <div className="my-0.5 font-body">
       <button
         onClick={() => hasExpandableContent && setOpen((o) => !o)}
-        className={`group flex w-full items-center gap-2 rounded-md px-2 py-1.5 text-left transition-colors ${hasExpandableContent ? "hover:bg-foreground/5" : "cursor-default"}`}
+        className={`flex items-center gap-2 py-0.5 text-left text-[12.5px] text-muted-foreground transition-colors ${hasExpandableContent ? "hover:text-foreground" : "cursor-default"}`}
       >
-        <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
-          {isRunning ? (
-            <Loader2 size={14} className="animate-spin text-accent" />
-          ) : isError ? (
-            <AlertTriangle size={14} className="text-destructive" />
-          ) : (
-            <Icon size={14} />
-          )}
-        </span>
-        <span className="flex-1 truncate text-[13px] font-medium text-foreground/90">
-          {isRunning ? label : summarizeResult(toolName, result)}
-        </span>
+        {isRunning ? (
+          <Loader2 size={13} className="shrink-0 animate-spin text-accent" />
+        ) : isError ? (
+          <AlertTriangle size={13} className="shrink-0 text-destructive" />
+        ) : (
+          <Icon size={13} className="shrink-0 text-muted-foreground/70" />
+        )}
+        <span className="truncate">{isRunning ? label : summarizeResult(toolName, result)}</span>
         {hasExpandableContent && (
           <ChevronRight
-            size={13}
-            className={`shrink-0 text-muted-foreground/60 transition-transform ${open ? "rotate-90" : ""}`}
+            size={12}
+            className={`shrink-0 text-muted-foreground/50 transition-transform ${open ? "rotate-90" : ""}`}
           />
         )}
       </button>
 
-      {detail && <p className="px-2 pb-1.5 pl-9 text-[12px] leading-snug text-muted-foreground">{detail}</p>}
+      {detail && <p className="py-0.5 pl-[21px] text-[12px] leading-snug text-muted-foreground">{detail}</p>}
 
       {open && (
-        <div className="space-y-2.5 border-t border-border/50 px-2 py-2 pl-9 text-[12.5px] animate-fade-in">
+        <div className="space-y-2.5 py-1.5 pl-[21px] text-[12.5px] animate-fade-in">
           {toolName === "runPythonCode" && typeof args?.code === "string" && args.code && (
             <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-sidebar px-2 py-1.5 font-mono text-[11px] text-foreground">
               {args.code}

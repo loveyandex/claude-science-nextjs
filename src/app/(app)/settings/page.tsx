@@ -51,6 +51,32 @@ export default function SettingsPage() {
       </aside>
 
       <div className="flex-1 min-h-0 overflow-y-auto scrollbar-thin">
+        {/* Sidebar's mobile replacement — below sm (640px) the sidebar
+            itself is `hidden`, so the section switcher has to live here
+            instead, as a horizontally scrollable pill row rather than
+            silently disappearing. */}
+        <nav className="sm:hidden flex gap-1.5 overflow-x-auto px-4 py-3 border-b border-border scrollbar-thin">
+          {SECTIONS.map((section) => {
+            const Icon = section.icon;
+            const isActive = active === section.id;
+            return (
+              <button
+                key={section.id}
+                onClick={() => setActive(section.id)}
+                className={cn(
+                  "flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-left text-[12.5px] transition-colors",
+                  isActive
+                    ? "bg-accent text-accent-foreground"
+                    : "bg-sidebar text-muted-foreground hover:text-foreground"
+                )}
+              >
+                <Icon size={13} />
+                {section.label}
+              </button>
+            );
+          })}
+        </nav>
+
         <div className="max-w-2xl mx-auto w-full px-4 md:px-8 py-6">
           {active === "ai-providers" && <AiProvidersSettingsPanel />}
           {active === "indexing-by-gemma" && <Gemma4SettingsPanel />}
