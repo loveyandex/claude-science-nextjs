@@ -1,84 +1,91 @@
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import { createGoogleGenerativeAI } from "@ai-sdk/google";
 import type { LanguageModel } from "ai";
-
-const baseURL = process.env.OPENAI_BASE_URL || "https://api.openai.com/v1";
-const apiKey = process.env.OPENAI_API_KEY;
-const modelName = process.env.MODEL_NAME || "gpt-oss-120b";
-
-if (!apiKey) {
-  // Not throwing here — we want the app (and especially /make-science's
-  // pending-list view) to still render without a key configured yet.
-  // The actual LLM calls will fail loudly with a clear message instead.
-  console.warn(
-    "[ai-provider] OPENAI_API_KEY is not set — LLM calls will fail until it's configured in .env"
-  );
-}
-
-const openaiCompatible = createOpenAICompatible({
-  name: "locaul-science-llm",
-  baseURL,
-  apiKey,
-});
-
-const google = createGoogleGenerativeAI({
-  // Reads GOOGLE_GENERATIVE_AI_API_KEY from env if apiKey isn't passed
-  // explicitly, but we're explicit here so a missing key fails the same
-  // clear way as the OpenAI-compatible provider does above.
-  apiKey: process.env.GOOGLE_GENERATIVE_AI_API_KEY,
-});
-
-if (!process.env.GOOGLE_GENERATIVE_AI_API_KEY) {
-  console.warn(
-    "[ai-provider] GOOGLE_GENERATIVE_AI_API_KEY is not set — the Gemini model option will fail until it's configured in .env"
-  );
-}
-
-const geminiModelName = process.env.GEMINI_MODEL_NAME || "gemini-3.1-flash-lite";
+import { prisma } from "@/lib/prisma";
+import { ensureEnvProvidersSeeded } from "@/lib/ai-providers-settings";
 
 /**
- * Model registry shared by /api/chat and both chat pages' model picker.
- * `id` is what the client sends in the request body to pick a provider —
- * keep these ids stable since they're also used as React state/localStorage
- * keys on the client.
+ * Provider clients are built per-request from DB rows (src/lib/ai-providers-settings.ts
+ * owns the pool) rather than once at import time, since which providers
+ * exist is no longer a build-time/.env-only fact — it's editable from
+ * /settings. See getModel() below.
  */
-export const MODEL_OPTIONS = [
-  {
-    id: "gpt-oss",
-    label: modelName,
-    description: "Your OPENAI_BASE_URL endpoint (OpenAI-compatible)",
-  },
-  {
-    id: "gemini-flash-lite",
-    label: geminiModelName,
-    description: "Google Generative AI",
-  },
-] as const;
 
-export type ModelId = (typeof MODEL_OPTIONS)[number]["id"];
+export type ResolvedModel = {
+  model: LanguageModel;
+  providerType: string;
+  modelName: string;
+};
 
-/** Resolve a client-selected model id to an actual AI SDK LanguageModel. */
-export function getModel(id: string | undefined | null): LanguageModel {
-  if (id === "gemini-flash-lite") {
-    return google(geminiModelName);
+function buildClientModel(
+  provider: { type: string; baseUrl: string | null; apiKey: string | null; label: string },
+  modelName: string
+): LanguageModel {
+  if (provider.type === "google") {
+    // baseURL is optional here — omitting it falls back to the AI SDK's
+    // own default (https://generativelanguage.googleapis.com/v1beta), but
+    // a user-set one lets this point at a proxy or a Vertex-compatible
+    // gateway instead of Google's public endpoint directly.
+    const google = createGoogleGenerativeAI({
+      apiKey: provider.apiKey ?? undefined,
+      baseURL: provider.baseUrl || undefined,
+    });
+    return google(modelName);
   }
-  // Default / "gpt-oss" / anything unrecognized falls back to the
-  // configured OpenAI-compatible endpoint rather than erroring, so an
-  // unfamiliar or stale model id from an older client tab doesn't hard-fail.
+  // "openai-compatible" (and any unrecognized type, defensively) — baseUrl
+  // is required for this type; validated on write in the settings routes.
+  const openaiCompatible = createOpenAICompatible({
+    name: provider.label,
+    baseURL: provider.baseUrl || "https://api.openai.com/v1",
+    apiKey: provider.apiKey ?? undefined,
+  });
   return openaiCompatible(modelName);
 }
 
 /**
- * Gemini 3.x models expose reasoning depth via thinkingConfig.thinkingLevel
- * (MINIMAL/LOW/MEDIUM/HIGH) instead of the thinkingBudget token count used
- * by 2.x models — the two aren't interchangeable, so callers need to know
- * which family the selected model id resolves to.
+ * Resolve a client-selected model id (AiProviderModel.wireId) to an actual
+ * AI SDK LanguageModel, plus enough metadata (providerType/modelName) for
+ * callers like the chat route to make provider-aware decisions (e.g.
+ * Gemini-only thinking mode) without a second DB round trip.
+ *
+ * An unrecognized/missing/deleted id doesn't error — it falls back to the
+ * first enabled model on the first enabled provider (oldest first), so a
+ * stale id from an old Chat row or another browser tab never hard-fails.
  */
-export function isGemini3(id: string | undefined | null): boolean {
-  return id === "gemini-flash-lite" && geminiModelName.startsWith("gemini-3");
+export async function getModel(id: string | undefined | null): Promise<ResolvedModel> {
+  await ensureEnvProvidersSeeded();
+
+  if (id) {
+    const row = await prisma.aiProviderModel.findFirst({
+      where: { wireId: id, enabled: true, provider: { enabled: true } },
+      include: { provider: true },
+    });
+    if (row) {
+      return {
+        model: buildClientModel(row.provider, row.modelName),
+        providerType: row.provider.type,
+        modelName: row.modelName,
+      };
+    }
+  }
+
+  const fallback = await prisma.aiProviderModel.findFirst({
+    where: { enabled: true, provider: { enabled: true } },
+    include: { provider: true },
+    orderBy: { createdAt: "asc" },
+  });
+  if (!fallback) {
+    throw new Error("No AI provider is configured — add one in Settings.");
+  }
+  return {
+    model: buildClientModel(fallback.provider, fallback.modelName),
+    providerType: fallback.provider.type,
+    modelName: fallback.modelName,
+  };
 }
 
 /** The default chat-capable model — used by /make-science's extraction step, which doesn't offer a picker. */
-export const model = openaiCompatible(modelName);
-
-export const MODEL_NAME = modelName;
+export async function getDefaultModel(): Promise<LanguageModel> {
+  const resolved = await getModel(undefined);
+  return resolved.model;
+}

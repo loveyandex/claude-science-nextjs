@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { model } from "@/lib/ai-provider";
+import { getDefaultModel } from "@/lib/ai-provider";
 import { fetchArticleList, buildPdfUrl } from "@/lib/articles-source";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 import { getEnabledKeyValues, getConcurrencyMode } from "@/lib/gemma4-settings";
@@ -273,7 +273,7 @@ export async function POST(req: Request) {
 
           const truncated = page1.content.slice(0, MAX_CHARS_TO_MODEL);
           const { object } = await generateObject({
-            model,
+            model: await getDefaultModel(),
             schema: extractionSchema,
             system:
               "You extract clean bibliographic metadata from a markdown transcription of the first page of an academic PDF (produced by a vision model, so formatting may be imperfect but the actual text content is real). Return only the real title and the real abstract.",

@@ -44,29 +44,46 @@ const TOOL_META: Record<
   {
     icon: typeof Search;
     label: (args: any) => string;
+    // A full-sentence description of exactly what this call did, shown in
+    // the expanded view in place of a raw key:value argument dump — e.g.
+    // "Searched the library by meaning for “SGD convergence”, up to 5
+    // results." Return null when the collapsed label already says
+    // everything worth saying (nothing left to add once expanded).
+    detail?: (args: any) => string | null;
   }
 > = {
   searchLibrarySemantic: {
     icon: Radar,
     label: (args) =>
       args?.query ? `Searching papers about "${args.query}"` : "Searching papers by meaning",
+    detail: (args) =>
+      args?.query
+        ? `Searched the library by meaning for “${args.query}”, up to ${args.limit ?? 5} result${(args.limit ?? 5) === 1 ? "" : "s"}.`
+        : null,
   },
   searchArticles: {
     icon: Search,
     label: (args) =>
       args?.query ? `Searching library for "${args.query}"` : "Browsing the library",
+    detail: (args) =>
+      args?.query
+        ? `Searched titles and abstracts for “${args.query}”, up to ${args.limit ?? 5} result${(args.limit ?? 5) === 1 ? "" : "s"}.`
+        : null,
   },
   listRecentArticles: {
     icon: ListTree,
     label: () => "Checking recently indexed articles",
+    detail: (args) => `Listed the ${args?.limit ?? 10} most recently indexed articles.`,
   },
   getLibraryStats: {
     icon: BarChart3,
     label: () => "Checking library stats",
+    detail: () => null,
   },
   getArticleByUrl: {
     icon: FileSearch,
     label: (args) => (args?.url ? `Opening "${shortUrl(args.url)}"` : "Opening article"),
+    detail: (args) => (args?.url ? `Opened the article at “${shortUrl(args.url)}”.` : null),
   },
   readArticlePage: {
     icon: BookOpen,
@@ -74,21 +91,39 @@ const TOOL_META: Record<
       args?.url
         ? `Reading page ${args.page ?? "?"} of "${shortUrl(args.url)}"`
         : "Reading a page",
+    detail: (args) =>
+      args?.url ? `Read page ${args.page ?? "?"} of “${shortUrl(args.url)}”.` : null,
   },
   getArticleFullContent: {
     icon: ScanEye,
     label: (args) =>
       args?.url ? `Reading full content of "${shortUrl(args.url)}"` : "Reading full article content",
+    detail: (args) =>
+      args?.url ? `Read the full content of “${shortUrl(args.url)}”, page by page.` : null,
   },
   webSearch: {
     icon: Globe,
     label: (args) => (args?.query ? `Searching the web for "${args.query}"` : "Searching the web"),
+    detail: (args) =>
+      args?.query
+        ? `Searched the public web for “${args.query}”, up to ${args.limit ?? 5} result${(args.limit ?? 5) === 1 ? "" : "s"}.`
+        : null,
   },
   runPythonCode: {
     icon: Terminal,
     label: () => "Running Python code",
+    detail: () => null, // the code itself is shown as a code block below, not a sentence
   },
 };
+
+/** Converts a camelCase/snake_case key into "Title Case" words, for the
+ *  generic fallback when a tool has no hand-written `detail`. */
+function humanizeKey(key: string): string {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replace(/_/g, " ")
+    .replace(/^./, (c) => c.toUpperCase());
+}
 
 function summarizeResult(toolName: string, result: unknown): string {
   if (result == null) return "Done.";
@@ -125,67 +160,80 @@ export function ToolFallback({ toolName, args, argsText, result, isError }: Tool
   const Icon = meta?.icon ?? Search;
   const isRunning = result === undefined && !isError;
   const label = meta?.label(args) ?? toolName;
+  // Shown as soon as the call finishes, no click required — this is the
+  // "what did it actually search for" sentence that used to be hidden
+  // behind an "ARGUMENTS" expand-only key:value dump. runPythonCode is
+  // excluded here because its real argument (the code) is substantial
+  // enough to deserve its own block below, not an inline sentence.
+  const detail = !isRunning && toolName !== "runPythonCode" ? meta?.detail?.(args) : null;
+  const hasExpandableContent =
+    result !== undefined || (toolName === "runPythonCode" && typeof args?.code === "string" && args.code);
 
   return (
-    <div className="my-1.5 font-body">
+    <div className="my-0.5 font-body">
       <button
-        onClick={() => setOpen((o) => !o)}
-        className="group flex w-full items-center gap-2 rounded-md px-1.5 py-1 text-left transition-colors hover:bg-foreground/5"
+        onClick={() => hasExpandableContent && setOpen((o) => !o)}
+        className={`flex items-center gap-2 py-0.5 text-left text-[12.5px] text-muted-foreground transition-colors ${hasExpandableContent ? "hover:text-foreground" : "cursor-default"}`}
       >
-        <span className="flex size-5 shrink-0 items-center justify-center text-muted-foreground">
-          {isRunning ? (
-            <Loader2 size={14} className="animate-spin text-accent" />
-          ) : isError ? (
-            <AlertTriangle size={14} className="text-destructive" />
-          ) : (
-            <Icon size={14} />
-          )}
-        </span>
-        <span className="flex-1 truncate text-[13px] text-muted-foreground">
-          {isRunning ? label : summarizeResult(toolName, result)}
-        </span>
-        <ChevronRight
-          size={13}
-          className={`shrink-0 text-muted-foreground/60 transition-transform ${open ? "rotate-90" : ""}`}
-        />
+        {isRunning ? (
+          <Loader2 size={13} className="shrink-0 animate-spin text-accent" />
+        ) : isError ? (
+          <AlertTriangle size={13} className="shrink-0 text-destructive" />
+        ) : (
+          <Icon size={13} className="shrink-0 text-muted-foreground/70" />
+        )}
+        <span className="truncate">{isRunning ? label : summarizeResult(toolName, result)}</span>
+        {hasExpandableContent && (
+          <ChevronRight
+            size={12}
+            className={`shrink-0 text-muted-foreground/50 transition-transform ${open ? "rotate-90" : ""}`}
+          />
+        )}
       </button>
 
+      {detail && <p className="py-0.5 pl-[21px] text-[12px] leading-snug text-muted-foreground">{detail}</p>}
+
       {open && (
-        <div className="ml-7 mt-1 space-y-2 border-l border-border/70 pl-3 text-[12.5px] animate-fade-in">
-          {argsText && argsText !== "{}" && (
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                arguments
-              </p>
-              <ArgsList args={args} />
-            </div>
+        <div className="space-y-2.5 py-1.5 pl-[21px] text-[12.5px] animate-fade-in">
+          {toolName === "runPythonCode" && typeof args?.code === "string" && args.code && (
+            <pre className="max-h-48 overflow-y-auto whitespace-pre-wrap break-words rounded bg-sidebar px-2 py-1.5 font-mono text-[11px] text-foreground">
+              {args.code}
+            </pre>
           )}
-          {result !== undefined && (
-            <div>
-              <p className="font-mono text-[10px] uppercase tracking-wide text-muted-foreground/70">
-                result
-              </p>
-              <ResultView toolName={toolName} result={result} />
-            </div>
-          )}
+          <FallbackArgs toolName={toolName} args={args} argsText={argsText} />
+          {result !== undefined && <ResultView toolName={toolName} result={result} />}
         </div>
       )}
     </div>
   );
 }
 
-function ArgsList({ args }: { args: Record<string, unknown> }) {
+/**
+ * Only reached for a tool with no hand-written `detail()` — still
+ * human-cased key labels rather than a raw camelCase/JSON dump, but this
+ * is the last resort, not the normal path.
+ */
+function FallbackArgs({
+  toolName,
+  args,
+  argsText,
+}: {
+  toolName: string;
+  args: Record<string, unknown>;
+  argsText: string;
+}) {
+  if (toolName === "runPythonCode" || TOOL_META[toolName]?.detail) return null;
   const entries = Object.entries(args ?? {}).filter(([, v]) => v !== undefined && v !== "");
-  if (entries.length === 0) return <p className="text-muted-foreground">none</p>;
+  if (entries.length === 0 || !argsText || argsText === "{}") return null;
   return (
-    <dl className="mt-0.5 space-y-0.5">
-      {entries.map(([k, v]) => (
-        <div key={k} className="flex gap-1.5">
-          <dt className="font-mono text-muted-foreground">{k}:</dt>
-          <dd className="text-foreground">{String(v)}</dd>
-        </div>
+    <p className="text-muted-foreground leading-snug">
+      {entries.map(([k, v], i) => (
+        <span key={k}>
+          {i > 0 && " · "}
+          {humanizeKey(k)}: <span className="text-foreground">{String(v)}</span>
+        </span>
       ))}
-    </dl>
+    </p>
   );
 }
 

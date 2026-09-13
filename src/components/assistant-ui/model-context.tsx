@@ -10,9 +10,12 @@ import {
 } from "react";
 
 /**
- * Static fallback in case /api/chat's GET (which reflects the real
- * MODEL_OPTIONS from src/lib/ai-provider.ts) hasn't resolved yet. Ids
- * must match ai-provider.ts's MODEL_OPTIONS ids exactly.
+ * Static fallback in case /api/chat's GET (which reflects the live,
+ * DB-backed provider/model pool — see src/lib/ai-providers-settings.ts)
+ * hasn't resolved yet. These ids match the two providers that get
+ * auto-seeded from .env on a fresh deployment (ensureEnvProvidersSeeded),
+ * so this stays an accurate default-deployment approximation even though
+ * it's no longer the literal source of truth once more providers are added.
  */
 const FALLBACK_MODELS = [
   { id: "gpt-oss", label: "gpt-oss-120b", description: "Your OpenAI-compatible endpoint" },

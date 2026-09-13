@@ -1,7 +1,7 @@
 import { generateObject } from "ai";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
-import { model } from "@/lib/ai-provider";
+import { getDefaultModel } from "@/lib/ai-provider";
 import { extractFirstPageText } from "@/lib/pdf";
 import { fetchArticleList, buildPdfUrl, ArticlesSourceError } from "@/lib/articles-source";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
@@ -114,7 +114,7 @@ export async function POST(req: Request) {
           const truncated = firstPageText.slice(0, MAX_CHARS_TO_MODEL);
 
           const { object } = await generateObject({
-            model,
+            model: await getDefaultModel(),
             schema: extractionSchema,
             system:
               "You extract clean bibliographic metadata from raw, messy text taken from the first page of a scanned/converted academic PDF. The text may contain OCR noise, running headers, journal names, DOIs, and page numbers mixed in with the real title and abstract. Return only the real title and the real abstract.",

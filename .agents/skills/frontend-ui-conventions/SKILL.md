@@ -117,8 +117,11 @@ another searchable list page, match that, not a fresh design.
 
 ## This file only covers UI/visual conventions
 
-For the database/auth/API architecture, see `../backend-architecture/SKILL.md`. For the AI SDK
-chat pipeline, model switching, tools, and the agent-activity timeline, see
-`../ai-chat-architecture/SKILL.md`. All three are meant to be read together when working on
-anything chat-related — the UI conventions here assume the data/streaming behavior documented
-in the other two.
+For layout behavior across viewport widths (breakpoints, the hamburger-vs-pill-row decision,
+what "responsive" actually requires beyond a `hidden md:flex` class), see
+`../responsive-design/SKILL.md`. For the database/auth/API architecture, see
+`../backend-architecture/SKILL.md`. For the AI SDK chat pipeline, model switching, tools, and the
+agent-activity timeline, see `../ai-chat-architecture/SKILL.md`. All four are meant to be read
+together when working on anything chat-related — the UI conventions here assume the
+data/streaming behavior documented in the other two, and any layout work should also follow the
+responsive-design file.

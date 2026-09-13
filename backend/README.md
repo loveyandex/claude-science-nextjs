@@ -85,7 +85,7 @@ See `.env.example` for the annotated version.
 
 ```bash
 INTERNAL_API_SECRET=...           # random shared secret, must match Next.js's INTERNAL_API_SECRET
-NEXTJS_BASE_URL=http://localhost:3000
+NEXTJS_BASE_URL=http://localhost:7007
 
 # make-science-gemma4
 CEREBRAS_API_KEY=csk-...          # OPTIONAL fallback only — real keys live at /settings now
