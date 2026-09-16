@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings, Boxes, Menu, X } from "lucide-react";
+import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings, Boxes, Menu, X, BookMarked } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { STAT_PAPERS_INDEXED } from "@/lib/data";
 import { cn } from "@/lib/utils";
@@ -48,6 +48,12 @@ const NAV_ITEMS = [
     label: "Embed",
     icon: Boxes,
     isActive: (p: string) => p === "/make-embedding",
+  },
+  {
+    href: "/springer",
+    label: "Springer",
+    icon: BookMarked,
+    isActive: (p: string) => p.startsWith("/springer"),
   },
 ];
 
