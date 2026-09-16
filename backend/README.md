@@ -105,7 +105,9 @@ EMBEDDING_PARALLEL=1              # >1 spawns processes; poor fit for uvicorn --
 ## Running
 
 ```bash
+
 uvicorn main:app --host 0.0.0.0 --port 8000
+
 ```
 
 Runs as its own process — not part of `npm run dev`. Start it separately whenever you want to use

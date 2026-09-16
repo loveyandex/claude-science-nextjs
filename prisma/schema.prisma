@@ -150,6 +150,55 @@ model AiProviderModel {
   @@index([providerId])
 }
 
+// A Springer journal a user has registered by its numeric journal id (the
+// path segment in https://link.springer.com/journal/<journalId>, e.g.
+// "10853" for Journal of Materials Science). Crawling is page-cursor based
+// since a journal's article-list page is paginated server-side (50/page)
+// and can run into the tens of thousands of articles — `lastListPage` is
+// how far the list crawl has gotten, so "crawl next page" always resumes
+// rather than re-walking from page 1.
+model SpringerJournal {
+  id            String   @id @default(cuid())
+  journalId     String   @unique // e.g. "10853"
+  name          String
+  url           String
+  lastListPage  Int      @default(0)
+  totalArticles Int? // from the list page's "Showing 1-50 of N articles" line
+  createdAt     DateTime @default(now())
+  articles      SpringerArticle[]
+}
+
+// One row per article discovered on a journal's article-list page, keyed by
+// DOI (globally unique, unlike Article.url which is a mirror-specific
+// path). Rows are created as stubs (title/href/doi only) by the list crawl,
+// then filled in by the detail crawl — the two-stage split mirrors
+// /make-science vs /make-science-gemma4's "list first, content second"
+// shape, since fetching every article's own page is far more expensive
+// than paging through the list.
+model SpringerArticle {
+  id            String          @id @default(cuid())
+  journalId     String
+  journal       SpringerJournal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  doi           String          @unique
+  href          String
+  title         String
+  section       String? // e.g. "Composites & nanocomposites"
+  publishedDate String? // as shown on the site, e.g. "10 September 2026" — not parsed, just displayed
+  openAccess    Boolean         @default(false)
+  abstract      String?
+  // Full-text markdown-ish content, only populated for open-access articles
+  // (paywalled ones only ever expose the abstract) — pulled from the
+  // article page's `.main-content` sections (Introduction, Results, etc.).
+  content       String?
+  status        String          @default("pending") // "pending" (stub from list crawl) | "indexed" (detail crawl done) | "failed"
+  errorReason   String?
+  createdAt     DateTime        @default(now())
+  updatedAt     DateTime        @updatedAt
+
+  @@index([journalId])
+  @@index([status])
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
