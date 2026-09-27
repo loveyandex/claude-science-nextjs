@@ -17,11 +17,18 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   });
   if (!journal) return Response.json({ error: "Journal not found" }, { status: 404 });
 
-  const [indexed, pending, openAccess] = await Promise.all([
+  const [indexed, pending, openAccess, pdfGroups] = await Promise.all([
     prisma.springerArticle.count({ where: { journalId: journal.id, status: "indexed" } }),
     prisma.springerArticle.count({ where: { journalId: journal.id, status: "pending" } }),
     prisma.springerArticle.count({ where: { journalId: journal.id, openAccess: true } }),
+    prisma.springerArticle.groupBy({
+      by: ["pdfStatus"],
+      where: { journalId: journal.id },
+      _count: { _all: true },
+    }),
   ]);
+  const pdfCount = (status: string | null) =>
+    pdfGroups.find((g) => g.pdfStatus === status)?._count._all ?? 0;
 
   return Response.json({
     journal: {
@@ -35,6 +42,12 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       indexed,
       pending,
       openAccess,
+      pdf: {
+        downloaded: pdfCount("downloaded"),
+        notFound: pdfCount("not_found"),
+        failed: pdfCount("failed"),
+        untried: pdfCount(null),
+      },
       createdAt: journal.createdAt,
     },
   });

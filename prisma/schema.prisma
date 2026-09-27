@@ -113,6 +113,15 @@ model AppSettings {
   // How many pages are handed to the Python service in one call. Bigger =
   // fewer round trips, but coarser stop granularity.
   embeddingPageBatch    Int   @default(8)
+
+  // --- Springer stage 3 ------------------------------------------------
+  // Base URL of the full-text PDF provider; the article's DOI is appended
+  // as a path, e.g. "https://myprovider.com" -> "https://myprovider.com/10.1007/s10853-025-11875-6".
+  springerPdfProviderUrl String?
+  // How long stage 3 waits on a provider's browser-check / CAPTCHA page
+  // (for it to clear itself, or for you to solve it in the visible window)
+  // before marking that article "failed".
+  springerPdfChallengeTimeoutSec Int @default(120)
 }
 
 // A configured AI provider instance (not a fixed enum) — two rows can both
@@ -192,11 +201,26 @@ model SpringerArticle {
   content       String?
   status        String          @default("pending") // "pending" (stub from list crawl) | "indexed" (detail crawl done) | "failed"
   errorReason   String?
+
+  // --- Stage 3: full-text PDF from the configured content provider --------
+  // (AppSettings.springerPdfProviderUrl + "/" + doi). Independent of
+  // `status`, since a paywalled article with only an abstract can still
+  // have its PDF available from the provider.
+  // null (never tried) | "downloaded" | "not_found" (provider answered but
+  // had no PDF for this DOI) | "failed" (network/timeout/etc — retryable)
+  pdfStatus     String?
+  pdfPath       String? // relative to SPRINGER_PDF_DIR, e.g. "10.1007/s10853-025-11875-6.pdf"
+  pdfSize       Int?
+  pdfSourceUrl  String? // final URL the PDF was served from, after any provider redirects
+  pdfError      String?
+  pdfCheckedAt  DateTime?
+
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
 
   @@index([journalId])
   @@index([status])
+  @@index([pdfStatus])
 }
 
 model User {

@@ -48,6 +48,7 @@ export async function GET(req: Request) {
         openAccess: true,
         abstract: true,
         status: true,
+        pdfStatus: true,
         createdAt: true,
         journal: { select: { id: true, journalId: true, name: true } },
       },

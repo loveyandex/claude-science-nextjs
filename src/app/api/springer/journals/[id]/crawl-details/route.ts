@@ -31,6 +31,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const body = await req.json().catch(() => ({}));
   const limit = Math.min(50, Math.max(1, typeof body?.limit === "number" ? body.limit : DEFAULT_BATCH_LIMIT));
+  const headless = body?.headless === true;
 
   const journal = await prisma.springerJournal.findUnique({ where: { id: params.id } });
   if (!journal) return Response.json({ error: "Journal not found" }, { status: 404 });
@@ -56,7 +57,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
         send({ type: "start", doi: article.doi, index: i + 1, total: batch.length });
 
         try {
-          const detail = await fetchArticleDetail(article.doi);
+          const detail = await fetchArticleDetail(article.doi, { headless });
           await prisma.springerArticle.update({
             where: { id: article.id },
             data: {

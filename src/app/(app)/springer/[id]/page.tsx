@@ -14,12 +14,16 @@ import {
   RefreshCcw,
   Search,
   FileText,
+  FileDown,
+  Settings,
 } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
+import { Switch } from "@/components/ui/switch";
 import { Skeleton } from "@/components/ui/skeleton";
+import { formatBytes } from "@/lib/utils";
 
 type JournalDetail = {
   id: string;
@@ -32,6 +36,7 @@ type JournalDetail = {
   indexed: number;
   pending: number;
   openAccess: number;
+  pdf: { downloaded: number; notFound: number; failed: number; untried: number };
 };
 
 type SpringerArticleRow = {
@@ -44,6 +49,7 @@ type SpringerArticleRow = {
   openAccess: boolean;
   abstract: string | null;
   status: string;
+  pdfStatus: string | null;
   createdAt: string;
 };
 
@@ -67,6 +73,13 @@ export default function SpringerJournalDetailPage() {
   const [log, setLog] = useState<string[]>([]);
   const [pageCount, setPageCount] = useState(3);
   const [detailBatch, setDetailBatch] = useState(15);
+  const [listHeadless, setListHeadless] = useStoredBool("springer:headless:list", false);
+  const [detailHeadless, setDetailHeadless] = useStoredBool("springer:headless:details", false);
+  const [fetchingPdfs, setFetchingPdfs] = useState(false);
+  const [pdfBatch, setPdfBatch] = useState(10);
+  const [retryNotFound, setRetryNotFound] = useState(false);
+  const [providerUrl, setProviderUrl] = useState<string | null | undefined>(undefined);
+  const busy = crawlingList || crawlingDetails || fetchingPdfs;
 
   const loadJournal = () => {
     authFetch(`/api/springer/journals/${journalDbId}`, { cache: "no-store" })
@@ -89,6 +102,12 @@ export default function SpringerJournalDetailPage() {
 
   useEffect(loadJournal, [authFetch, journalDbId]);
   useEffect(() => {
+    authFetch("/api/settings/springer", { cache: "no-store" })
+      .then((res) => res.json())
+      .then((data) => setProviderUrl(data.pdfProviderUrl ?? null))
+      .catch(() => setProviderUrl(null));
+  }, [authFetch]);
+  useEffect(() => {
     setArticles(null);
     loadArticles();
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -104,6 +123,10 @@ export default function SpringerJournalDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
+    if (!res.ok) {
+      const data = await res.json().catch(() => ({}));
+      throw new Error(data.error || `Request failed (${res.status})`);
+    }
     if (!res.body) throw new Error("No response stream from server");
     const reader = res.body.getReader();
     const decoder = new TextDecoder();
@@ -125,7 +148,7 @@ export default function SpringerJournalDetailPage() {
     setCrawlingList(true);
     setLog([]);
     try {
-      await runStream(`/api/springer/journals/${journalDbId}/crawl-list`, { pageCount }, (ev) => {
+      await runStream(`/api/springer/journals/${journalDbId}/crawl-list`, { pageCount, headless: listHeadless }, (ev) => {
         if (ev.type === "page_start") setLog((l) => [...l, `Fetching list page ${ev.page}…`]);
         if (ev.type === "page_done") setLog((l) => [...l, `Page ${ev.page}: found ${ev.found} articles`]);
         if (ev.type === "stopped") setLog((l) => [...l, `Stopped: ${ev.reason}`]);
@@ -146,7 +169,7 @@ export default function SpringerJournalDetailPage() {
     setCrawlingDetails(true);
     setLog([]);
     try {
-      await runStream(`/api/springer/journals/${journalDbId}/crawl-details`, { limit: detailBatch }, (ev) => {
+      await runStream(`/api/springer/journals/${journalDbId}/crawl-details`, { limit: detailBatch, headless: detailHeadless }, (ev) => {
         if (ev.type === "batch_start") setLog((l) => [...l, `Fetching ${ev.total} article pages…`]);
         if (ev.type === "start") setLog((l) => [...l, `[${ev.index}/${ev.total}] ${ev.doi}`]);
         if (ev.type === "success")
@@ -162,6 +185,42 @@ export default function SpringerJournalDetailPage() {
       setLog((l) => [...l, err instanceof Error ? err.message : "Crawl failed"]);
     } finally {
       setCrawlingDetails(false);
+      loadJournal();
+      loadArticles();
+    }
+  };
+
+  const fetchPdfs = async () => {
+    setFetchingPdfs(true);
+    setLog([]);
+    try {
+      await runStream(
+        `/api/springer/journals/${journalDbId}/fetch-pdfs`,
+        { limit: pdfBatch, retryNotFound },
+        (ev) => {
+          if (ev.type === "batch_start") setLog((l) => [...l, `Fetching ${ev.total} PDFs from ${ev.provider}…`]);
+          if (ev.type === "start") setLog((l) => [...l, `[${ev.index}/${ev.total}] ${ev.url}`]);
+          if (ev.type === "challenge")
+            setLog((l) => [
+              ...l,
+              `⏳ Browser check / CAPTCHA — solve it in the opened browser window (waiting up to ${ev.timeoutSec}s)…`,
+            ]);
+          if (ev.type === "downloaded")
+            setLog((l) => [...l, `✓ ${ev.doi} — ${formatBytes(ev.size as number)} from ${ev.sourceUrl}`]);
+          if (ev.type === "not_found") setLog((l) => [...l, `– ${ev.doi}: not found. ${ev.message}`]);
+          if (ev.type === "error") setLog((l) => [...l, `✗ ${ev.doi}: ${ev.message}`]);
+          if (ev.type === "stopped") setLog((l) => [...l, `Stopped: ${ev.reason}`]);
+          if (ev.type === "done")
+            setLog((l) => [
+              ...l,
+              `Done — ${ev.downloaded} downloaded, ${ev.notFound} not found, ${ev.failed} failed, ${ev.remaining} left to try`,
+            ]);
+        }
+      );
+    } catch (err) {
+      setLog((l) => [...l, err instanceof Error ? err.message : "PDF fetch failed"]);
+    } finally {
+      setFetchingPdfs(false);
       loadJournal();
       loadArticles();
     }
@@ -200,11 +259,12 @@ export default function SpringerJournalDetailPage() {
           {journal.totalArticles != null ? ` of ~${Math.ceil(journal.totalArticles / 50)} pages` : ""}
         </p>
 
-        <div className="grid grid-cols-4 gap-3 mb-6">
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
           <StatCard label="crawled" value={journal.articleCount} />
           <StatCard label="indexed" value={journal.indexed} accent />
           <StatCard label="pending" value={journal.pending} />
           <StatCard label="open access" value={journal.openAccess} />
+          <StatCard label="pdfs" value={journal.pdf.downloaded} accent />
         </div>
 
         {/* Stage 1: crawl list */}
@@ -218,7 +278,7 @@ export default function SpringerJournalDetailPage() {
             doi/title/href as a stub row.
           </p>
           <div className="flex items-center gap-2 flex-wrap">
-            <Button onClick={crawlList} disabled={crawlingList || crawlingDetails} size="sm">
+            <Button onClick={crawlList} disabled={busy} size="sm">
               {crawlingList ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
               Crawl next batch
             </Button>
@@ -234,11 +294,12 @@ export default function SpringerJournalDetailPage() {
                 className="w-14 rounded-md border border-border bg-transparent px-2 py-1 text-foreground outline-none focus-visible:border-accent"
               />
             </label>
+            <HeadlessToggle checked={listHeadless} onChange={setListHeadless} disabled={crawlingList} />
           </div>
         </div>
 
         {/* Stage 2: crawl details */}
-        <div className="rounded-lg border border-border bg-card p-3.5 mb-6">
+        <div className="rounded-lg border border-border bg-card p-3.5 mb-4">
           <div className="flex items-center gap-2 mb-2">
             <FileText size={14} className="text-accent" />
             <h2 className="font-display font-semibold text-[13px]">2. Crawl abstracts / content</h2>
@@ -250,7 +311,7 @@ export default function SpringerJournalDetailPage() {
           <div className="flex items-center gap-2 flex-wrap">
             <Button
               onClick={crawlDetails}
-              disabled={crawlingList || crawlingDetails || journal.pending === 0}
+              disabled={busy || journal.pending === 0}
               size="sm"
             >
               {crawlingDetails ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
@@ -268,7 +329,61 @@ export default function SpringerJournalDetailPage() {
                 className="w-14 rounded-md border border-border bg-transparent px-2 py-1 text-foreground outline-none focus-visible:border-accent"
               />
             </label>
+            <HeadlessToggle checked={detailHeadless} onChange={setDetailHeadless} disabled={crawlingDetails} />
           </div>
+        </div>
+
+        {/* Stage 3: PDFs from the content provider */}
+        <div className="rounded-lg border border-border bg-card p-3.5 mb-6">
+          <div className="flex items-center gap-2 mb-2">
+            <FileDown size={14} className="text-accent" />
+            <h2 className="font-display font-semibold text-[13px]">3. Get PDFs from content provider</h2>
+          </div>
+          <p className="font-mono text-[11px] text-muted-foreground mb-2 break-all">
+            Opens {providerUrl ? `${providerUrl}/<doi>` : "<provider>/<doi>"} for each article, follows any
+            redirects, and saves the PDF as &lt;doi&gt;.pdf.
+          </p>
+          <p className="font-mono text-[10.5px] text-muted-foreground mb-3">
+            {journal.pdf.downloaded} downloaded · {journal.pdf.notFound} not found · {journal.pdf.failed} failed ·{" "}
+            {journal.pdf.untried} not tried
+          </p>
+          {providerUrl === null ? (
+            <Link
+              href="/settings"
+              className="inline-flex items-center gap-1.5 font-mono text-[11px] text-accent hover:underline"
+            >
+              <Settings size={12} /> Set the provider URL in Settings → Springer first
+            </Link>
+          ) : (
+            <div className="flex items-center gap-3 flex-wrap">
+              <Button onClick={fetchPdfs} disabled={busy || providerUrl === undefined} size="sm">
+                {fetchingPdfs ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
+                Fetch next batch
+              </Button>
+              <label className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                batch size
+                <input
+                  type="number"
+                  min={1}
+                  max={50}
+                  value={pdfBatch}
+                  disabled={fetchingPdfs}
+                  onChange={(e) => setPdfBatch(Number(e.target.value) || 1)}
+                  className="w-14 rounded-md border border-border bg-transparent px-2 py-1 text-foreground outline-none focus-visible:border-accent"
+                />
+              </label>
+              <label className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+                <input
+                  type="checkbox"
+                  checked={retryNotFound}
+                  disabled={fetchingPdfs}
+                  onChange={(e) => setRetryNotFound(e.target.checked)}
+                  className="accent-[hsl(var(--accent))]"
+                />
+                retry not-found
+              </label>
+            </div>
+          )}
         </div>
 
         {log.length > 0 && (
@@ -317,6 +432,8 @@ export default function SpringerJournalDetailPage() {
                 <span className="font-mono text-[10px] text-muted-foreground truncate">{a.doi}</span>
                 <div className="flex items-center gap-1.5 shrink-0">
                   {a.openAccess && <Badge variant="accent">open access</Badge>}
+                  {a.pdfStatus === "downloaded" && <Badge variant="accent">pdf</Badge>}
+                  {a.pdfStatus === "not_found" && <Badge>no pdf</Badge>}
                   <Badge variant={a.status === "indexed" ? "solid" : "default"}>{a.status}</Badge>
                 </div>
               </div>
@@ -363,6 +480,45 @@ export default function SpringerJournalDetailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+// Per-browser preference; storage can be unavailable (private mode,
+// blocked site data), in which case it just doesn't persist.
+function useStoredBool(key: string, initial: boolean): [boolean, (v: boolean) => void] {
+  const [value, setValue] = useState(initial);
+  useEffect(() => {
+    try {
+      const stored = localStorage.getItem(key);
+      if (stored !== null) setValue(stored === "1");
+    } catch {}
+  }, [key]);
+  const update = (v: boolean) => {
+    setValue(v);
+    try {
+      localStorage.setItem(key, v ? "1" : "0");
+    } catch {}
+  };
+  return [value, update];
+}
+
+function HeadlessToggle({
+  checked,
+  onChange,
+  disabled,
+}: {
+  checked: boolean;
+  onChange: (v: boolean) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <label
+      className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground cursor-pointer"
+      title={checked ? "Crawls in the background, no browser window" : "Opens a visible browser window you can watch"}
+    >
+      <Switch checked={checked} onCheckedChange={onChange} disabled={disabled} />
+      {checked ? "headless" : "show browser"}
+    </label>
   );
 }
 

@@ -9,3 +9,6 @@ next-env.d.ts
 /prisma/dev.db
 /prisma/dev.db-journal
 /prisma/migrations/dev.db
+
+# downloaded Springer PDFs (stage 3)
+/data/

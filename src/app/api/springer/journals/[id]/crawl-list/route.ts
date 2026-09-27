@@ -28,6 +28,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   if (!auth) return unauthorized();
 
   const body = await req.json().catch(() => ({}));
+  const headless = body?.headless === true;
   const pageCount = Math.min(
     20,
     Math.max(1, typeof body?.pageCount === "number" ? body.pageCount : DEFAULT_PAGE_COUNT)
@@ -49,7 +50,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
         let result;
         try {
-          result = await fetchJournalListPage(journal.journalId, nextPage);
+          result = await fetchJournalListPage(journal.journalId, nextPage, { headless });
         } catch (err) {
           const message =
             err instanceof SpringerCrawlError || err instanceof Error

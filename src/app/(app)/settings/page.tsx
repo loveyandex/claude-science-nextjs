@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { Cpu, ScanEye, Settings as SettingsIcon } from "lucide-react";
+import { BookMarked, Cpu, ScanEye, Settings as SettingsIcon } from "lucide-react";
 import { cn } from "@/lib/utils";
 import { Gemma4SettingsPanel } from "@/components/settings/gemma4-settings-panel";
 import { AiProvidersSettingsPanel } from "@/components/settings/ai-providers-settings-panel";
+import { SpringerSettingsPanel } from "@/components/settings/springer-settings-panel";
 
 // Built as a real sidebar-of-sections rather than a single panel so future
 // settings (e.g. other pipelines/providers) have somewhere to go without a
@@ -13,6 +14,7 @@ import { AiProvidersSettingsPanel } from "@/components/settings/ai-providers-set
 const SECTIONS = [
   { id: "ai-providers", label: "AI Providers", icon: Cpu },
   { id: "indexing-by-gemma", label: "Indexing · gemma4", icon: ScanEye },
+  { id: "springer", label: "Springer", icon: BookMarked },
 ] as const;
 
 type SectionId = (typeof SECTIONS)[number]["id"];
@@ -80,6 +82,7 @@ export default function SettingsPage() {
         <div className="max-w-2xl mx-auto w-full px-4 md:px-8 py-6">
           {active === "ai-providers" && <AiProvidersSettingsPanel />}
           {active === "indexing-by-gemma" && <Gemma4SettingsPanel />}
+          {active === "springer" && <SpringerSettingsPanel />}
         </div>
       </div>
     </div>

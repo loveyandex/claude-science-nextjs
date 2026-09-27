@@ -9,13 +9,27 @@ import { chromium, type Page } from "playwright";
  * hot path) and a shared browser would outlive and leak across serverless-
  * style Next.js route invocations.
  */
-async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
-  const browser = await chromium.launch({ headless: false });
+export const BROWSER_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36";
+
+// Default when a caller doesn't choose: a visible browser, so you can watch
+// a crawl — and stage 3 needs it to let you solve a provider's CAPTCHA.
+export const BROWSER_HEADLESS = false;
+
+export type CrawlOptions = { headless?: boolean };
+
+// channel "chromium" runs headless mode on the same full Chromium build as
+// headed mode, instead of Playwright's separate chrome-headless-shell
+// binary — which isn't necessarily installed, and behaves differently
+// enough that some sites treat it as a bot.
+export function launchBrowser(headless: boolean = BROWSER_HEADLESS) {
+  return chromium.launch({ headless, channel: "chromium" });
+}
+
+async function withPage<T>(fn: (page: Page) => Promise<T>, opts: CrawlOptions = {}): Promise<T> {
+  const browser = await launchBrowser(opts.headless);
   try {
-    const page = await browser.newPage({
-      userAgent:
-        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
-    });
+    const page = await browser.newPage({ userAgent: BROWSER_USER_AGENT });
     return await fn(page);
   } finally {
     await browser.close();
@@ -24,16 +38,26 @@ async function withPage<T>(fn: (page: Page) => Promise<T>): Promise<T> {
 
 export class SpringerCrawlError extends Error {}
 
+// Springer pages keep ad/analytics requests going indefinitely, so waiting
+// for "networkidle" regularly times out (seen on article pages even in a
+// visible browser). Instead: wait for the HTML, then for the one element
+// the caller actually reads. If that element never shows up, carry on —
+// callers treat a missing element as "no data" (e.g. past the last page).
+async function openPage(page: Page, url: string, readySelector: string) {
+  const res = await page.goto(url, { waitUntil: "domcontentloaded", timeout: 45000 });
+  if (!res || !res.ok()) {
+    throw new SpringerCrawlError(`Springer returned ${res?.status() ?? "no response"} for ${url}`);
+  }
+  await page.waitForSelector(readySelector, { timeout: 20000 }).catch(() => {});
+}
+
 export type SpringerJournalMeta = { name: string; url: string };
 
 /** Fetches the journal's display name from its landing page (`<h1>`). */
 export async function fetchJournalMeta(journalId: string): Promise<SpringerJournalMeta> {
   const url = `https://link.springer.com/journal/${journalId}`;
   return withPage(async (page) => {
-    const res = await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-    if (!res || !res.ok()) {
-      throw new SpringerCrawlError(`Springer returned ${res?.status() ?? "no response"} for ${url}`);
-    }
+    await openPage(page, url, "h1");
     const name = await page
       .locator("h1")
       .first()
@@ -67,14 +91,12 @@ function doiFromHref(href: string): string | null {
 /** Crawls one page of a journal's article list (50 articles/page on Springer). */
 export async function fetchJournalListPage(
   journalId: string,
-  pageNum: number
+  pageNum: number,
+  opts: CrawlOptions = {}
 ): Promise<SpringerListPage> {
   const url = `https://link.springer.com/journal/${journalId}/articles?page=${pageNum}`;
   return withPage(async (page) => {
-    const res = await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-    if (!res || !res.ok()) {
-      throw new SpringerCrawlError(`Springer returned ${res?.status() ?? "no response"} for ${url}`);
-    }
+    await openPage(page, url, "article.app-card-open");
 
     const cards = page.locator("article.app-card-open");
     const count = await cards.count();
@@ -113,7 +135,7 @@ export async function fetchJournalListPage(
     const totalArticles = totalMatch ? parseInt(totalMatch[1].replace(/,/g, ""), 10) : null;
 
     return { articles, totalArticles };
-  });
+  }, opts);
 }
 
 export type SpringerArticleDetail = {
@@ -124,13 +146,10 @@ export type SpringerArticleDetail = {
 };
 
 /** Crawls a single article's page for its title, abstract, and (if open access) full content. */
-export async function fetchArticleDetail(doi: string): Promise<SpringerArticleDetail> {
+export async function fetchArticleDetail(doi: string, opts: CrawlOptions = {}): Promise<SpringerArticleDetail> {
   const url = `https://link.springer.com/article/${doi}`;
   return withPage(async (page) => {
-    const res = await page.goto(url, { waitUntil: "networkidle", timeout: 30000 });
-    if (!res || !res.ok()) {
-      throw new SpringerCrawlError(`Springer returned ${res?.status() ?? "no response"} for ${url}`);
-    }
+    await openPage(page, url, '[data-test="article-title"], .c-article-title');
 
     const title = (
       await page
@@ -201,5 +220,5 @@ export async function fetchArticleDetail(doi: string): Promise<SpringerArticleDe
       openAccess,
       content,
     };
-  });
+  }, opts);
 }
