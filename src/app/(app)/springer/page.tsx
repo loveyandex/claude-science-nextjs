@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { BookMarked, Plus, Loader2, ExternalLink, AlertTriangle } from "lucide-react";
+import { BookMarked, Plus, Loader2, ExternalLink, AlertTriangle, Link2, ArrowRight } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-context";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -96,6 +96,22 @@ export default function SpringerJournalsPage() {
           </a>
           .
         </p>
+
+        <Link
+          href="/springer/one-link"
+          className="flex items-center gap-3 rounded-lg border border-dashed border-border bg-card px-3.5 py-3 mb-6 hover:border-accent transition-colors group"
+        >
+          <Link2 size={15} className="text-accent shrink-0" />
+          <div className="min-w-0 flex-1">
+            <p className="font-display font-semibold text-[13px] group-hover:text-accent transition-colors">
+              Add one article by link
+            </p>
+            <p className="font-mono text-[10.5px] text-muted-foreground truncate">
+              Paste a link.springer.com/article/… URL — crawls its abstract and fetches its PDF, no list crawl needed
+            </p>
+          </div>
+          <ArrowRight size={14} className="text-muted-foreground group-hover:text-accent shrink-0" />
+        </Link>
 
         {error && (
           <div className="flex items-start gap-2 rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 mb-6 text-[13px]">

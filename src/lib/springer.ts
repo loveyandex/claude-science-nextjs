@@ -143,6 +143,12 @@ export type SpringerArticleDetail = {
   abstract: string | null;
   openAccess: boolean;
   content: string | null;
+  // Read from the article's own page, so a single article can be added
+  // without its journal's list crawl having seen it first.
+  journalId: string | null;
+  journalName: string | null;
+  section: string | null;
+  publishedDate: string | null;
 };
 
 /** Crawls a single article's page for its title, abstract, and (if open access) full content. */
@@ -214,11 +220,38 @@ export async function fetchArticleDetail(doi: string, opts: CrawlOptions = {}): 
       }
     }
 
+    const journalHrefs = await page
+      .locator('a[href*="/journal/"]')
+      .evaluateAll((els) => els.map((el) => el.getAttribute("href") || ""))
+      .catch(() => [] as string[]);
+    const journalId =
+      journalHrefs.map((h) => h.match(/\/journal\/(\d+)\/?$/)?.[1]).find(Boolean) ??
+      doi.match(/^10\.1007\/s(\d{5})-/)?.[1] ??
+      null;
+    const journalName =
+      (await page.locator('meta[name="citation_journal_title"]').getAttribute("content").catch(() => null))?.trim() ||
+      null;
+    const section =
+      (await page.locator('[data-test="article-category"]').first().innerText({ timeout: 2000 }).catch(() => "")).trim() ||
+      null;
+    const publishedDate =
+      (
+        await page
+          .locator(".c-article-identifiers time, .c-article-header time")
+          .first()
+          .innerText({ timeout: 2000 })
+          .catch(() => "")
+      ).trim() || null;
+
     return {
       title: title || "",
       abstract: abstract || null,
       openAccess,
       content,
+      journalId,
+      journalName,
+      section,
+      publishedDate,
     };
   }, opts);
 }
