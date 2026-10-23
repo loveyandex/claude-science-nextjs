@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 import { parseDoi } from "@/lib/doi";
+import { registerDownloadedPdf } from "@/lib/article-by-doi";
 import { getSpringerSettings } from "@/lib/springer-settings";
 import { buildProviderUrl, fetchPdfFromProvider, ProviderBrowser, savePdf } from "@/lib/springer-pdf";
 
@@ -55,6 +56,7 @@ export async function POST(req: Request) {
         });
         if (result.kind === "pdf") {
           const saved = await savePdf(doi, result.bytes);
+          await registerDownloadedPdf(doi, saved);
           await prisma.springerArticle
             .updateMany({
               where: { doi },

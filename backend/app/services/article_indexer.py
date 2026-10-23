@@ -51,8 +51,8 @@ class PdfPageRenderer:
         self._dpi = dpi
         self._poppler_path = poppler_path
 
-    def render(self, pdf_bytes: bytes):
-        return convert_from_bytes(pdf_bytes, dpi=self._dpi, poppler_path=self._poppler_path)
+    def render(self, pdf_bytes: bytes, dpi: int | None = None):
+        return convert_from_bytes(pdf_bytes, dpi=dpi or self._dpi, poppler_path=self._poppler_path)
 
 
 class ArticleIndexingService:

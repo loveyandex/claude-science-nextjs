@@ -223,6 +223,47 @@ model SpringerArticle {
   @@index([pdfStatus])
 }
 
+// One row per PDF fetched by DOI — from /doi or /springer/one-link — no
+// matter the publisher. Keyed by DOI (unlike Article, keyed by a mirror
+// url); the PDF itself lives on local disk under springer-pdf.ts's
+// PDF_ROOT. Pages are transcribed by the same render-to-image → gemma4
+// vision pipeline as make-science-gemma4, but through a user-picked
+// openai-compatible AiProvider instead of the Cerebras key pool.
+model ArticleByDOI {
+  id        String  @id @default(cuid())
+  doi       String  @unique
+  source    String  @default("doi") // "doi" | "springer" (also a SpringerArticle row with this doi)
+  // Extracted from page 1's transcription; null until that has run.
+  title     String?
+  abstract  String?
+  pdfPath   String // relative to SPRINGER_PDF_DIR, e.g. "10.1007/s10853-025-11876-5.pdf"
+  pdfSize   Int?
+  pageCount Int?
+  // null (not transcribed) | "partial" (some pages failed — re-run resumes) | "indexed" | "failed"
+  status    String?
+  error     String?
+  // Which provider/model produced the pages, shown alongside them.
+  transcribeProvider String?
+  transcribeModel    String?
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  pages     ArticleByDOIPage[]
+
+  @@index([status])
+}
+
+model ArticleByDOIPage {
+  id         String       @id @default(cuid())
+  articleId  String
+  article    ArticleByDOI @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  pageNumber Int
+  content    String // markdown transcription from the vision model
+  createdAt  DateTime     @default(now())
+  updatedAt  DateTime     @updatedAt
+
+  @@unique([articleId, pageNumber])
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique

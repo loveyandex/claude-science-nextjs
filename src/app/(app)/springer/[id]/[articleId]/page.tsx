@@ -8,6 +8,7 @@ import { useAuth } from "@/components/auth/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Skeleton } from "@/components/ui/skeleton";
+import { MakeSciencePanel } from "@/components/doi/make-science-panel";
 import { formatBytes } from "@/lib/utils";
 
 type ArticleDetail = {
@@ -125,6 +126,12 @@ export default function SpringerArticleDetailPage() {
         </div>
 
         <PdfPanel article={article} busy={pdfBusy} onLoad={loadPdf} actionError={pdfActionError} />
+
+        {article.pdfStatus === "downloaded" && (
+          <div className="mb-6">
+            <MakeSciencePanel doi={article.doi} />
+          </div>
+        )}
 
         {article.status === "failed" && article.errorReason && (
           <div className="rounded-lg border border-destructive/30 bg-destructive/5 px-3 py-2.5 mb-6 text-[13px] text-destructive">

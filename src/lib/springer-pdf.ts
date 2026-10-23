@@ -1,7 +1,7 @@
 import { mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { chromium, type BrowserContext, type Page, type Download, type Response } from "playwright";
-import { BROWSER_HEADLESS, BROWSER_USER_AGENT } from "@/lib/springer";
+import { BROWSER_HEADLESS, BROWSER_USER_AGENT, ensurePlaywrightBrowsers } from "@/lib/springer";
 
 export const PDF_ROOT = path.resolve(
   process.env.SPRINGER_PDF_DIR || path.join(process.cwd(), "data", "springer-pdfs")
@@ -105,6 +105,7 @@ export class ProviderBrowser {
 
   async get(): Promise<BrowserContext> {
     if (this.context) return this.context;
+    ensurePlaywrightBrowsers();
     await mkdir(PROFILE_DIR, { recursive: true });
     const context = await chromium.launchPersistentContext(PROFILE_DIR, {
       headless: BROWSER_HEADLESS,

@@ -11,7 +11,7 @@ from __future__ import annotations
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 
-from app.api.routes import embedding, gemma, health, search
+from app.api.routes import doi, embedding, gemma, health, search
 from app.config import get_settings
 from app.core.errors import ConfigurationError, ServiceError, VectorStoreError
 
@@ -55,7 +55,7 @@ def create_app() -> FastAPI:
     async def _service_error(_: Request, exc: ServiceError) -> JSONResponse:
         return JSONResponse(status_code=500, content={"ok": False, "error": str(exc)})
 
-    for router in (health.router, gemma.router, embedding.router, search.router):
+    for router in (health.router, gemma.router, doi.router, embedding.router, search.router):
         app.include_router(router)
 
     return app

@@ -27,6 +27,25 @@ class IndexArticleRequest(BaseModel):
     cerebrasApiKeys: list[str] = []
 
 
+# --- DOI pipeline -----------------------------------------------------------
+
+
+class VisionProviderPayload(BaseModel):
+    baseUrl: str
+    apiKey: str | None = None
+    model: str
+
+
+class TranscribeDoiPdfRequest(BaseModel):
+    doi: str
+    skipPages: list[int] = []
+    provider: VisionProviderPayload
+    # Pages sent to the provider at once. A local model usually wants 1.
+    concurrency: int = Field(default=1, ge=1, le=8)
+    # Overrides PDF_RENDER_DPI for this call; None keeps the env default.
+    dpi: int | None = Field(default=None, ge=72, le=600)
+
+
 # --- embedding --------------------------------------------------------------
 
 

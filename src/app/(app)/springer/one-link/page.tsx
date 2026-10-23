@@ -2,11 +2,12 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { ArrowRight, ChevronLeft, FileDown, FileText, Link2, Loader2, Play, Settings } from "lucide-react";
+import { ArrowRight, ChevronLeft, FileDown, FileText, Link2, Loader2, Play, ScanEye, Settings } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-context";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Switch } from "@/components/ui/switch";
+import { MakeSciencePanel, type MakeScienceStatus } from "@/components/doi/make-science-panel";
 import { parseDoi } from "@/lib/doi";
 import { formatBytes } from "@/lib/utils";
 
@@ -28,10 +29,12 @@ export default function SpringerOneLinkPage() {
   const [providerUrl, setProviderUrl] = useState<string | null | undefined>(undefined);
   const [headless, setHeadless] = useStoredBool("springer:headless:details", false);
   const [fetchPdf, setFetchPdf] = useState(true);
+  const [transcribe, setTranscribe] = useState(true);
   const [running, setRunning] = useState(false);
   const [log, setLog] = useState<string[]>([]);
   const [detailsState, setDetailsState] = useState<StageState>("idle");
   const [pdfState, setPdfState] = useState<StageState>("idle");
+  const [scienceState, setScienceState] = useState<MakeScienceStatus>("idle");
   const [pdfNote, setPdfNote] = useState<string | null>(null);
   const [added, setAdded] = useState<Added | null>(null);
 
@@ -52,6 +55,7 @@ export default function SpringerOneLinkPage() {
     setPdfNote(null);
     setDetailsState("running");
     setPdfState(fetchPdf ? "idle" : "skipped");
+    setScienceState(fetchPdf && transcribe ? "idle" : "skipped");
     const add = (line: string) => setLog((l) => [...l, line]);
     try {
       const res = await authFetch("/api/springer/one-link", {
@@ -150,8 +154,9 @@ export default function SpringerOneLinkPage() {
         </div>
         <p className="font-mono text-[11px] text-muted-foreground mb-6">
           Paste one article link and it&apos;s added to the Springer articles table right away — no journal list
-          crawl. Runs stage 2 (abstract / content) and stage 3 (PDF from the content provider) for just that
-          article. Its journal is registered automatically if it&apos;s new.
+          crawl. Runs stage 2 (abstract / content), stage 3 (PDF from the content provider), then stage 4 (each
+          PDF page as an image → vision model → markdown on ArticleByDOI). Its journal is registered
+          automatically if it&apos;s new.
         </p>
 
         <div className="rounded-lg border border-border bg-card p-3.5 mb-4">
@@ -191,15 +196,28 @@ export default function SpringerOneLinkPage() {
                 type="checkbox"
                 checked={fetchPdf}
                 disabled={running}
-                onChange={(e) => setFetchPdf(e.target.checked)}
+                onChange={(e) => {
+                  setFetchPdf(e.target.checked);
+                  if (!e.target.checked) setTranscribe(false);
+                }}
                 className="accent-[hsl(var(--accent))]"
               />
               also fetch PDF (stage 3)
             </label>
+            <label className="flex items-center gap-1.5 font-mono text-[11px] text-muted-foreground">
+              <input
+                type="checkbox"
+                checked={transcribe}
+                disabled={running || !fetchPdf}
+                onChange={(e) => setTranscribe(e.target.checked)}
+                className="accent-[hsl(var(--accent))]"
+              />
+              also transcribe pages (stage 4)
+            </label>
           </div>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
           <StageCard
             icon={<FileText size={14} className="text-accent" />}
             title="2. Crawl abstract / content"
@@ -223,6 +241,16 @@ export default function SpringerOneLinkPage() {
                   <Settings size={11} /> Settings
                 </Link>
               ) : null
+            }
+          />
+          <StageCard
+            icon={<ScanEye size={14} className="text-accent" />}
+            title="4. Pages → markdown"
+            state={!transcribe || !fetchPdf ? "skipped" : scienceState}
+            note={
+              !transcribe || !fetchPdf
+                ? "Unchecked — enable stage 4 above"
+                : "Each PDF page as an image → vision model → ArticleByDOI"
             }
           />
         </div>
@@ -258,6 +286,17 @@ export default function SpringerOneLinkPage() {
             </p>
           </Link>
         )}
+
+        <div className="mt-4">
+          <MakeSciencePanel
+            key={added?.doi ?? doi ?? "waiting"}
+            doi={added?.doi ?? doi}
+            title="4. Render each PDF page as an image"
+            autoStart={transcribe && pdfState === "done" && !running}
+            skipped={!transcribe || !fetchPdf}
+            onStatus={setScienceState}
+          />
+        </div>
       </div>
     </div>
   );

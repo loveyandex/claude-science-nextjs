@@ -17,6 +17,7 @@ from functools import lru_cache
 from app.config import Settings, get_settings
 from app.services.article_indexer import ArticleIndexingService, PdfPageRenderer
 from app.services.chunking import build_chunker
+from app.services.doi_transcriber import DoiPdfTranscriptionService
 from app.services.embedding_service import PageEmbeddingService
 from app.services.nextjs_client import HttpProgressReporter, NextJsClient, NullProgressReporter
 from app.services.search_service import SimilaritySearchService
@@ -67,6 +68,15 @@ def get_dry_run_embedding_service() -> PageEmbeddingService:
 def get_search_service() -> SimilaritySearchService:
     settings = get_settings()
     return SimilaritySearchService(get_vector_store(), settings.embedding_collection)
+
+
+@lru_cache(maxsize=1)
+def get_doi_transcription_service() -> DoiPdfTranscriptionService:
+    settings = get_settings()
+    return DoiPdfTranscriptionService(
+        renderer=PdfPageRenderer(settings.pdf_dpi, settings.poppler_path),
+        nextjs=get_nextjs_client(),
+    )
 
 
 @lru_cache(maxsize=1)

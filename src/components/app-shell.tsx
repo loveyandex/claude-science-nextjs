@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings, Boxes, Menu, X, BookMarked, FileDown } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
+import { isChatRoute, RtlProvider, RtlToggle } from "@/components/rtl-context";
 import { STAT_PAPERS_INDEXED } from "@/lib/data";
 import { cn } from "@/lib/utils";
 import { useAuth } from "@/components/auth/auth-context";
@@ -64,6 +65,14 @@ const NAV_ITEMS = [
 ];
 
 export function AppShell({ children }: { children: React.ReactNode }) {
+  return (
+    <RtlProvider>
+      <AppShellFrame>{children}</AppShellFrame>
+    </RtlProvider>
+  );
+}
+
+function AppShellFrame({ children }: { children: React.ReactNode }) {
   const pathname = usePathname() || "";
   const { user, logout } = useAuth();
 
@@ -151,6 +160,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
               <span className="w-1.5 h-1.5 rounded-full bg-accent" />
               {user?.email ?? "indexed & grounded locally"}
             </div>
+            {isChatRoute(pathname) && <RtlToggle />}
             <ThemeToggle />
             <MobileNav pathname={pathname} email={user?.email} logout={logout} />
           </div>

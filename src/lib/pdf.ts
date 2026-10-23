@@ -51,3 +51,14 @@ export async function extractPageText(
 
   return { ok: true, pageText: (pages[pageNumber - 1] ?? "").trim(), pageCount: totalPages };
 }
+
+/** Every page's plain text (index 0 = page 1), parsing the PDF once. */
+export async function extractAllPageTexts(
+  pdfBytes: ArrayBuffer | Uint8Array
+): Promise<{ pages: string[]; pageCount: number }> {
+  const bytes = pdfBytes instanceof Uint8Array ? pdfBytes : new Uint8Array(pdfBytes);
+  const pdf = await getDocumentProxy(bytes);
+  const { totalPages, text } = await extractText(pdf, { mergePages: false });
+  const pages = (Array.isArray(text) ? text : [text]).map((t) => t.trim());
+  return { pages, pageCount: totalPages };
+}

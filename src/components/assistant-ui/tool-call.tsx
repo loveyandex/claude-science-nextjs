@@ -23,6 +23,7 @@ import {
   Terminal,
   AlertTriangle,
   Check,
+  BookMarked,
 } from "lucide-react";
 
 type ToolFallbackProps = {
@@ -37,6 +38,12 @@ function shortUrl(url: unknown): string {
   if (typeof url !== "string") return "";
   const last = url.split("/").filter(Boolean).pop() ?? url;
   return decodeURIComponent(last).slice(0, 60);
+}
+
+function pageRange(args: any): string {
+  const from = args?.fromPage ?? "?";
+  const to = args?.toPage;
+  return to && to !== from ? `pages ${from}–${to}` : `page ${from}`;
 }
 
 const TOOL_META: Record<
@@ -101,6 +108,31 @@ const TOOL_META: Record<
     detail: (args) =>
       args?.url ? `Read the full content of “${shortUrl(args.url)}”, page by page.` : null,
   },
+  searchSpringerArticles: {
+    icon: BookMarked,
+    label: (args) =>
+      args?.query ? `Searching Springer articles for "${args.query}"` : "Browsing Springer articles",
+    detail: (args) =>
+      `Searched Springer articles${args?.query ? ` for “${args.query}”` : ""}${
+        args?.pdfStatus ? ` with PDF status “${args.pdfStatus}”` : ""
+      }, up to ${args?.limit ?? 8} results.`,
+  },
+  searchDoiArticles: {
+    icon: Search,
+    label: (args) => (args?.query ? `Searching DOI articles for "${args.query}"` : "Browsing DOI articles"),
+    detail: (args) =>
+      `Searched PDFs downloaded by DOI${args?.query ? ` for “${args.query}”` : ""}, up to ${args?.limit ?? 8} results.`,
+  },
+  getArticleByDoi: {
+    icon: FileSearch,
+    label: (args) => (args?.doi ? `Looking up ${args.doi}` : "Looking up a DOI"),
+    detail: (args) => (args?.doi ? `Looked up everything stored for DOI ${args.doi}.` : null),
+  },
+  readDoiArticlePages: {
+    icon: BookOpen,
+    label: (args) => `Reading ${pageRange(args)} of ${args?.doi ?? "an article"}`,
+    detail: (args) => (args?.doi ? `Read ${pageRange(args)} of ${args.doi}.` : null),
+  },
   webSearch: {
     icon: Globe,
     label: (args) => (args?.query ? `Searching the web for "${args.query}"` : "Searching the web"),
@@ -138,6 +170,18 @@ function summarizeResult(toolName: string, result: unknown): string {
   }
   if (toolName === "getArticleFullContent" && typeof r.pageCount === "number") {
     return `Read all ${r.pageCount} page${r.pageCount === 1 ? "" : "s"} of "${String(r.title ?? "")}".`;
+  }
+  if (toolName === "readDoiArticlePages" && Array.isArray(r.pages)) {
+    const n = r.pages.length;
+    return `Read ${n} page${n === 1 ? "" : "s"}${r.pageCount ? ` of ${r.pageCount}` : ""}${
+      r.title ? ` of "${String(r.title)}"` : ""
+    }.`;
+  }
+  if (toolName === "getArticleByDoi" && r.doi) {
+    return r.title ? `Found "${String(r.title)}".` : `Found ${String(r.doi)}.`;
+  }
+  if (toolName === "searchSpringerArticles" && typeof r.total === "number") {
+    return `Found ${r.total} Springer article${r.total === 1 ? "" : "s"}.`;
   }
   if (toolName === "runPythonCode") {
     const exitCode = (r as any).exitCode;
@@ -290,6 +334,24 @@ function ResultView({ toolName, result }: { toolName: string; result: unknown })
     );
   }
 
+  if (toolName === "readDoiArticlePages" && Array.isArray(r.pages)) {
+    return (
+      <div className="mt-0.5 space-y-2">
+        {Boolean(r.title) && <p className="text-foreground">{String(r.title)}</p>}
+        {r.pages.map((p: any) => (
+          <div key={p.pageNumber}>
+            <p className="font-mono text-[10px] text-muted-foreground">
+              p.{p.pageNumber} · {p.source === "transcription" ? "transcribed" : "raw pdf text"}
+            </p>
+            <pre className="max-h-40 overflow-y-auto whitespace-pre-wrap break-words text-muted-foreground">
+              {p.content || "(empty page)"}
+            </pre>
+          </div>
+        ))}
+      </div>
+    );
+  }
+
   if (toolName === "runPythonCode") {
     return (
       <div className="mt-0.5 space-y-1.5">
@@ -353,7 +415,7 @@ function ResultView({ toolName, result }: { toolName: string; result: unknown })
         {articles.map((a: any, i: number) => (
           <li key={i} className="flex items-start gap-1.5">
             <Check size={12} className="mt-0.5 shrink-0 text-accent" />
-            <span className="text-foreground">{a.title ?? a.url ?? "untitled"}</span>
+            <span className="text-foreground">{a.title ?? a.doi ?? a.url ?? "untitled"}</span>
           </li>
         ))}
       </ul>

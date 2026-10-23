@@ -20,13 +20,18 @@ import {
 import { MarkdownText } from "@/components/assistant-ui/markdown-text";
 import { StepFlowParts } from "@/components/assistant-ui/step-flow";
 import { ModelPicker } from "@/components/assistant-ui/model-picker";
+import { useRtl } from "@/components/rtl-context";
 
 const actionButton =
   "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground";
 
 export function Thread() {
+  const { rtl } = useRtl();
   return (
-    <ThreadPrimitive.Root className="flex h-full flex-col items-stretch bg-background font-serif text-foreground">
+    <ThreadPrimitive.Root
+      dir={rtl ? "rtl" : "ltr"}
+      className="flex h-full flex-col items-stretch bg-background font-serif text-foreground"
+    >
       <AuiIf condition={(s) => s.thread.isEmpty}>
         <EmptyState />
       </AuiIf>
@@ -76,7 +81,7 @@ function Composer() {
         <span className="hidden font-mono text-[11px] text-muted-foreground sm:inline">
           asks your indexed library first
         </span>
-        <div className="ml-auto flex items-center gap-1">
+        <div className="ms-auto flex items-center gap-1">
           <ComposerPrimaryAction />
         </div>
       </div>

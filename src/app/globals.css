@@ -289,7 +289,7 @@
   }
   .chat-markdown ul,
   .chat-markdown ol {
-    padding-left: 1.4rem;
+    padding-inline-start: 1.4rem;
   }
   .chat-markdown ul {
     list-style: disc;
@@ -312,6 +312,8 @@
     border: 1px solid hsl(var(--border));
     border-radius: 0.3rem;
     padding: 0.1rem 0.35rem;
+    direction: ltr;
+    unicode-bidi: isolate;
   }
   .chat-markdown pre {
     font-family: var(--font-mono);
@@ -321,6 +323,9 @@
     border-radius: 0.6rem;
     padding: 0.9rem 1rem;
     overflow-x: auto;
+    direction: ltr;
+    unicode-bidi: isolate;
+    text-align: left;
   }
   .chat-markdown pre code {
     background: transparent;
@@ -328,8 +333,8 @@
     padding: 0;
   }
   .chat-markdown blockquote {
-    border-left: 3px solid hsl(var(--border));
-    padding-left: 1rem;
+    border-inline-start: 3px solid hsl(var(--border));
+    padding-inline-start: 1rem;
     color: hsl(var(--muted-foreground));
   }
   .chat-markdown table {
@@ -341,7 +346,7 @@
   .chat-markdown td {
     border: 1px solid hsl(var(--border));
     padding: 0.4rem 0.6rem;
-    text-align: left;
+    text-align: start;
   }
   .chat-markdown img {
     max-width: 100%;
@@ -355,10 +360,22 @@
   }
   .chat-markdown .katex {
     font-size: 1.05em;
+    direction: ltr;
+    unicode-bidi: isolate;
   }
   .chat-markdown .katex-display {
     overflow-x: auto;
     overflow-y: hidden;
     padding: 0.25rem 0;
+    direction: ltr;
+    unicode-bidi: isolate;
+    text-align: left;
   }
+}
+
+/* Persian chat (RTL toggle). Source Serif has no Farsi glyphs; the system
+   UI face (Segoe UI on Windows) does, and reads at a normal text weight. */
+[dir="rtl"].font-serif,
+[dir="rtl"] .font-serif {
+  font-family: ui-sans-serif, system-ui, sans-serif;
 }

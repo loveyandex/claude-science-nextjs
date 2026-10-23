@@ -45,6 +45,31 @@ class NextJsClient:
         )
         res.raise_for_status()
 
+    def fetch_doi_pdf(self, client: httpx.Client, doi: str) -> bytes:
+        res = client.get(
+            f"{self._base_url}/api/doi-articles/internal-pdf",
+            params={"doi": doi},
+            headers=self._headers(),
+        )
+        res.raise_for_status()
+        return res.content
+
+    def push_doi_page_markdown(
+        self,
+        client: httpx.Client,
+        doi: str,
+        page_number: int,
+        page_count: int,
+        content: str,
+    ) -> None:
+        res = client.post(
+            f"{self._base_url}/api/doi-articles/ingest-page",
+            json={"doi": doi, "pageNumber": page_number, "pageCount": page_count, "content": content},
+            headers=self._headers(),
+            timeout=self._timeout,
+        )
+        res.raise_for_status()
+
     def push_embedding_progress(self, payload: dict) -> None:
         try:
             res = httpx.post(

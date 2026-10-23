@@ -5,6 +5,7 @@ import Link from "next/link";
 import { Download, ExternalLink, FileDown, Loader2, Play, Settings } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-context";
 import { Button } from "@/components/ui/button";
+import { MakeSciencePanel } from "@/components/doi/make-science-panel";
 import { parseDoi } from "@/lib/doi";
 import { formatBytes } from "@/lib/utils";
 
@@ -216,6 +217,15 @@ export default function DoiImportPage() {
             {pdfError && <p className="font-mono text-[10.5px] text-destructive mt-2">{pdfError}</p>}
           </div>
         )}
+
+        <div className="mt-4">
+          <MakeSciencePanel
+            key={result?.kind === "downloaded" ? result.doi : doi ?? "waiting"}
+            doi={result?.kind === "downloaded" ? result.doi : doi}
+            title="2. Render each PDF page as an image"
+            autoStart={result?.kind === "downloaded" && !fetching}
+          />
+        </div>
       </div>
     </div>
   );

@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 import { getSpringerSettings } from "@/lib/springer-settings";
+import { registerDownloadedPdf } from "@/lib/article-by-doi";
 import { buildProviderUrl, fetchPdfFromProvider, ProviderBrowser, savePdf } from "@/lib/springer-pdf";
 
 export const dynamic = "force-dynamic";
@@ -92,6 +93,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
             });
             if (result.kind === "pdf") {
               const saved = await savePdf(doi, result.bytes);
+              await registerDownloadedPdf(doi, saved);
               await prisma.springerArticle.update({
                 where: { id },
                 data: {

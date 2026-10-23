@@ -1,3 +1,5 @@
+import { existsSync, readdirSync } from "node:fs";
+import path from "node:path";
 import { chromium, type Page } from "playwright";
 
 /**
@@ -18,11 +20,35 @@ export const BROWSER_HEADLESS = false;
 
 export type CrawlOptions = { headless?: boolean };
 
+function playwrightBrowsersLookInstalled(dir: string | undefined): boolean {
+  if (!dir || !existsSync(dir)) return false;
+  try {
+    return readdirSync(dir).some((name) => {
+      if (!name.startsWith("chromium")) return false;
+      return (
+        existsSync(path.join(dir, name, "chrome-win64", "chrome.exe")) ||
+        existsSync(path.join(dir, name, "chrome-win", "chrome.exe"))
+      );
+    });
+  } catch {
+    return false;
+  }
+}
+
+// Agent shells set PLAYWRIGHT_BROWSERS_PATH to an empty sandbox cache, so
+// Chromium "doesn't exist" even when the real install is in ms-playwright.
+export function ensurePlaywrightBrowsers() {
+  if (playwrightBrowsersLookInstalled(process.env.PLAYWRIGHT_BROWSERS_PATH)) return;
+  const local = process.env.LOCALAPPDATA ? path.join(process.env.LOCALAPPDATA, "ms-playwright") : "";
+  if (playwrightBrowsersLookInstalled(local)) process.env.PLAYWRIGHT_BROWSERS_PATH = local;
+}
+
 // channel "chromium" runs headless mode on the same full Chromium build as
 // headed mode, instead of Playwright's separate chrome-headless-shell
 // binary — which isn't necessarily installed, and behaves differently
 // enough that some sites treat it as a bot.
 export function launchBrowser(headless: boolean = BROWSER_HEADLESS) {
+  ensurePlaywrightBrowsers();
   return chromium.launch({ headless, channel: "chromium" });
 }
 

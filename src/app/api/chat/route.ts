@@ -8,9 +8,10 @@ import { semanticSearchLibrary } from "@/lib/qdrant-search";
 import { runPythonCode } from "@/lib/python-runner";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 import { ensureMessageIds } from "@/lib/message-ids";
+import { doiArticleTools } from "@/lib/chat-tools/doi-articles";
 
 export const dynamic = "force-dynamic";
-export const maxDuration = 60;
+export const maxDuration = 300;
 
 const ARTICLE_SELECT = { title: true, abstract: true, url: true, pdfUrl: true } as const;
 
@@ -50,6 +51,18 @@ page 2 of that paper").
 available for articles indexed via make-science-gemma4 (the page-image/vision pipeline). Use this \
 when the person wants real depth/detail on one specific article rather than just its abstract, and \
 readArticlePage's one-page-at-a-time isn't enough.
+
+DOI / Springer tools (separate tables from the library above — the tools above can't see these):
+- searchSpringerArticles: keyword search over articles crawled from registered Springer journals \
+(SpringerArticle), with an optional pdfStatus filter ("downloaded", "not_found", "failed", "untried") \
+and per-status counts. Use for questions about the Springer crawl, or which articles have PDFs.
+- searchDoiArticles: keyword search over every PDF downloaded by DOI (ArticleByDOI, Springer or \
+not), with how many of its pages have been transcribed.
+- getArticleByDoi: everything stored for one DOI — Springer record (journal, date, abstract, PDF \
+path/size, record id) plus PDF page count and transcription state. Call it first to learn the page count.
+- readDoiArticlePages: read a DOI's PDF page by page (up to 5 pages per call). Returns the \
+vision-model markdown transcription where available, the PDF's raw text otherwise. To read a whole \
+article, page through it with consecutive ranges until nextPage is null, and cite page numbers.
 
 General tools:
 - webSearch: real web search (not the local library) for anything outside the indexed papers.
@@ -98,7 +111,9 @@ export async function POST(req: Request) {
     model,
     system: SYSTEM_PROMPT,
     messages: modelMessages,
-    stopWhen: stepCountIs(8),
+    // Paging through a whole DOI article with readDoiArticlePages is ~1
+    // step per 5 pages, on top of the lookup and the final answer.
+    stopWhen: stepCountIs(16),
     // Best-effort "thinking mode": Gemini supports this natively via
     // thinkingConfig, so it's only attached when the resolved model's
     // provider is actually "google" — other providers get no
@@ -318,6 +333,8 @@ export async function POST(req: Request) {
           };
         },
       }),
+
+      ...doiArticleTools,
 
       webSearch: tool({
         description:
