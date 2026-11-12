@@ -3,7 +3,7 @@
 import { useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings, Boxes, Menu, X, BookMarked, FileDown } from "lucide-react";
+import { Sparkles, MessageSquare, Library, Database, Bot, Search, LogOut, ScanEye, Settings, Boxes, Menu, X, BookMarked, FileDown, Workflow } from "lucide-react";
 import { ThemeToggle } from "@/components/theme-toggle";
 import { isChatRoute, RtlProvider, RtlToggle } from "@/components/rtl-context";
 import { STAT_PAPERS_INDEXED } from "@/lib/data";
@@ -22,6 +22,12 @@ const NAV_ITEMS = [
     label: "Chat (assistant-ui)",
     icon: Bot,
     isActive: (p: string) => p === "/chat-assist-ui" || p.startsWith("/c-assist-ui/"),
+  },
+  {
+    href: "/workflows",
+    label: "Workflows",
+    icon: Workflow,
+    isActive: (p: string) => p === "/workflows" || p.startsWith("/workflow/"),
   },
   {
     href: "/library",

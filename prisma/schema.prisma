@@ -270,6 +270,7 @@ model User {
   passwordHash String
   createdAt    DateTime @default(now())
   chats        Chat[]
+  researchWorkflows ResearchWorkflow[]
 }
 
 // One row per conversation. `messages` stores the full AI SDK v7 UIMessage[]
@@ -290,4 +291,110 @@ model Chat {
   updatedAt DateTime @updatedAt
 
   @@index([userId, updatedAt])
+}
+
+// --- Research workflows (/workflows) ----------------------------------------
+// A long-lived research assignment for an agent. The user shapes `brief`
+// by chatting with it (right pane, `chatMessages`), then starts runs: each
+// run is one durable Workflow DevKit execution (runId) of a WorkflowAgent
+// that searches/reads the library and writes findings. Everything the run
+// does is mirrored into ResearchWorkflowEvent so the timeline survives
+// restarts and can be read days later. The Workflow DevKit's own state lives
+// in the separate "workflow" schema (see .env).
+model ResearchWorkflow {
+  id           String   @id @default(cuid())
+  userId       String
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name         String
+  // What the agent is asked to investigate — its standing instructions.
+  brief        String   @default("")
+  // AiProviderModel.wireId used for both research runs and the chat pane.
+  modelWireId  String?
+  // Upper bound on model calls per run (cost/latency control).
+  maxSteps     Int      @default(40)
+  // "draft" (never run) | "running" | "completed" | "failed" | "cancelled" — mirrors the latest run.
+  status       String   @default("draft")
+  currentRunId String?
+  chatMessages Json     @default("[]")
+  // Workflow DevKit run id of the chat turn still streaming, if any.
+  activeChatRunId String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+  lastActivityAt DateTime @default(now())
+
+  runs     ResearchRun[]
+  events   ResearchWorkflowEvent[]
+  findings ResearchFinding[]
+
+  @@index([userId, updatedAt])
+}
+
+model ResearchRun {
+  id          String           @id @default(cuid())
+  workflowId  String
+  workflow    ResearchWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  number      Int              // 1-based, per workflow
+  // Workflow DevKit run id (wrun_…); null until start() returned.
+  wfRunId     String?          @unique
+  // "queued" | "running" | "completed" | "failed" | "cancelled"
+  status      String           @default("queued")
+  brief       String           // brief as it was when the run started
+  modelWireId String?
+  modelLabel  String?
+  maxSteps    Int
+  stepCount   Int              @default(0)
+  toolCallCount Int            @default(0)
+  // The agent's plan/checklist, as last set by its updatePlan tool: [{ title, status, note? }]
+  plan        Json             @default("[]")
+  report      String?          // final markdown report
+  error       String?
+  inputTokens  Int             @default(0)
+  outputTokens Int             @default(0)
+  startedAt   DateTime?
+  endedAt     DateTime?
+  createdAt   DateTime         @default(now())
+  updatedAt   DateTime         @updatedAt
+
+  events   ResearchWorkflowEvent[]
+  findings ResearchFinding[]
+
+  @@unique([workflowId, number])
+  @@index([workflowId, createdAt])
+}
+
+model ResearchWorkflowEvent {
+  id         String           @id @default(cuid())
+  workflowId String
+  workflow   ResearchWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  runId      String?
+  run        ResearchRun?     @relation(fields: [runId], references: [id], onDelete: Cascade)
+  // "run_started" | "run_completed" | "run_failed" | "run_cancelled" | "thinking" |
+  // "tool" | "finding" | "plan" | "note" | "report" | "brief_updated"
+  type       String
+  title      String
+  detail     String?          // markdown body (agent text, error message, …)
+  // Tool calls: { tool, input, output, ok, durationMs }; findings: { findingId }; …
+  data       Json?
+  createdAt  DateTime         @default(now())
+
+  @@index([workflowId, createdAt])
+  @@index([runId, createdAt])
+}
+
+model ResearchFinding {
+  id         String           @id @default(cuid())
+  workflowId String
+  workflow   ResearchWorkflow @relation(fields: [workflowId], references: [id], onDelete: Cascade)
+  runId      String?
+  run        ResearchRun?     @relation(fields: [runId], references: [id], onDelete: SetNull)
+  title      String
+  content    String           // markdown
+  // [{ doi?, url?, title?, page?, quote? }]
+  sources    Json             @default("[]")
+  confidence String?          // "high" | "medium" | "low"
+  tags       String[]         @default([])
+  createdAt  DateTime         @default(now())
+  updatedAt  DateTime         @updatedAt
+
+  @@index([workflowId, createdAt])
 }

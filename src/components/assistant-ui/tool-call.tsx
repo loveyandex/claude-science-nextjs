@@ -24,6 +24,15 @@ import {
   AlertTriangle,
   Check,
   BookMarked,
+  Link2,
+  ListChecks,
+  Lightbulb,
+  NotebookPen,
+  Activity,
+  FileText,
+  Play,
+  CircleStop,
+  PenLine,
 } from "lucide-react";
 
 type ToolFallbackProps = {
@@ -146,6 +155,54 @@ const TOOL_META: Record<
     label: () => "Running Python code",
     detail: () => null, // the code itself is shown as a code block below, not a sentence
   },
+
+  // --- research workflow tools (/workflow/[id]) ---------------------------
+  fetchWebPage: {
+    icon: Link2,
+    label: (args) => (args?.url ? `Reading ${shortUrl(args.url)}` : "Reading a web page"),
+    detail: (args) => (args?.url ? `Fetched ${args.url}.` : null),
+  },
+  updatePlan: {
+    icon: ListChecks,
+    label: (args) => `Updating the plan (${args?.steps?.length ?? 0} steps)`,
+  },
+  recordFinding: {
+    icon: Lightbulb,
+    label: (args) => (args?.title ? `Recording finding: ${args.title}` : "Recording a finding"),
+  },
+  listFindings: {
+    icon: Lightbulb,
+    label: (args) => (args?.query ? `Checking findings about "${args.query}"` : "Checking the findings"),
+  },
+  writeNote: {
+    icon: NotebookPen,
+    label: (args) => (args?.title ? `Note: ${args.title}` : "Writing a note"),
+  },
+  getWorkflowState: {
+    icon: Activity,
+    label: () => "Checking the workflow's state",
+    detail: () => null,
+  },
+  getRecentActivity: {
+    icon: Activity,
+    label: (args) => (args?.runNumber ? `Reading run #${args.runNumber}'s activity` : "Reading recent activity"),
+  },
+  updateBrief: {
+    icon: PenLine,
+    label: (args) => (args?.name ? `Updating the brief and renaming to "${args.name}"` : "Updating the brief"),
+  },
+  startResearchRun: {
+    icon: Play,
+    label: () => "Starting a research run",
+  },
+  cancelResearchRun: {
+    icon: CircleStop,
+    label: () => "Cancelling the research run",
+  },
+  readRunReport: {
+    icon: FileText,
+    label: (args) => (args?.runNumber ? `Reading run #${args.runNumber}'s report` : "Reading the latest report"),
+  },
 };
 
 /** Converts a camelCase/snake_case key into "Title Case" words, for the
@@ -183,6 +240,17 @@ function summarizeResult(toolName: string, result: unknown): string {
   if (toolName === "searchSpringerArticles" && typeof r.total === "number") {
     return `Found ${r.total} Springer article${r.total === 1 ? "" : "s"}.`;
   }
+  if (toolName === "startResearchRun" && r.ok) return `Run #${String(r.number)} started.`;
+  if (toolName === "cancelResearchRun" && r.ok) return `Run #${String(r.number)} cancelled.`;
+  if (toolName === "updateBrief" && r.ok) return "Brief saved.";
+  if (toolName === "listFindings" && typeof r.count === "number") {
+    return `${r.count} finding${r.count === 1 ? "" : "s"}.`;
+  }
+  if (toolName === "getRecentActivity" && typeof r.count === "number") {
+    return `${r.count} event${r.count === 1 ? "" : "s"}.`;
+  }
+  if (toolName === "getWorkflowState" && r.status) return `Status: ${String(r.status)}.`;
+  if (toolName === "readRunReport" && typeof r.number === "number") return `Read run #${r.number}'s report.`;
   if (toolName === "runPythonCode") {
     const exitCode = (r as any).exitCode;
     if ((r as any).timedOut) return "Python code timed out.";
