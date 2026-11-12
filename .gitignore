@@ -12,3 +12,4 @@ next-env.d.ts
 
 # downloaded Springer PDFs (stage 3)
 /data/
+/qdrant

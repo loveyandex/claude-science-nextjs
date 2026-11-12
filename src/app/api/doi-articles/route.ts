@@ -1,6 +1,7 @@
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 import { ensureArticleByDoi } from "@/lib/article-by-doi";
 import { parseDoi } from "@/lib/doi";
+import { getActiveTranscription } from "@/lib/doi-transcribe";
 import { prisma } from "@/lib/prisma";
 
 export const dynamic = "force-dynamic";
@@ -15,7 +16,7 @@ export async function GET(req: Request) {
   if (!doi) return Response.json({ error: "Missing or invalid doi" }, { status: 400 });
 
   const article = await ensureArticleByDoi(doi);
-  if (!article) return Response.json({ article: null });
+  if (!article) return Response.json({ article: null, activeRun: null });
 
   const pages = await prisma.articleByDOIPage.findMany({
     where: { articleId: article.id },
@@ -38,5 +39,9 @@ export async function GET(req: Request) {
       transcribeModel: article.transcribeModel,
       pagesDone: pages.map((p) => p.pageNumber),
     },
+    // A run still going in this server (e.g. started before a page reload,
+    // or by the stage-4 job) — the panel follows it instead of offering to
+    // start a second one.
+    activeRun: getActiveTranscription(doi),
   });
 }

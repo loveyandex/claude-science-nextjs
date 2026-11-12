@@ -1,5 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
+import { vlmCounts } from "@/lib/springer-vlm";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
   });
   if (!journal) return Response.json({ error: "Journal not found" }, { status: 404 });
 
-  const [indexed, pending, openAccess, pdfGroups] = await Promise.all([
+  const [indexed, pending, openAccess, pdfGroups, vlm] = await Promise.all([
     prisma.springerArticle.count({ where: { journalId: journal.id, status: "indexed" } }),
     prisma.springerArticle.count({ where: { journalId: journal.id, status: "pending" } }),
     prisma.springerArticle.count({ where: { journalId: journal.id, openAccess: true } }),
@@ -26,6 +27,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
       where: { journalId: journal.id },
       _count: { _all: true },
     }),
+    vlmCounts(journal.id),
   ]);
   const pdfCount = (status: string | null) =>
     pdfGroups.find((g) => g.pdfStatus === status)?._count._all ?? 0;
@@ -48,6 +50,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
         failed: pdfCount("failed"),
         untried: pdfCount(null),
       },
+      vlm,
       createdAt: journal.createdAt,
     },
   });

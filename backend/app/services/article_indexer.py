@@ -31,6 +31,8 @@ class IndexArticleOutcome:
     page_count: int = 0
     failed_pages: list[dict] = field(default_factory=list)
     all_keys_rate_limited: bool = False
+    # Pages skipped because the caller cancelled the run (DOI pipeline only).
+    cancelled_pages: list[int] = field(default_factory=list)
     error: str | None = None
 
     def to_response(self) -> dict:
@@ -40,6 +42,7 @@ class IndexArticleOutcome:
             "ok": True,
             "pageCount": self.page_count,
             "failedPages": self.failed_pages,
+            "cancelledPages": self.cancelled_pages,
             "allKeysRateLimited": self.all_keys_rate_limited,
         }
 

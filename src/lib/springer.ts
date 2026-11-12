@@ -114,6 +114,39 @@ function doiFromHref(href: string): string | null {
   return match ? match[1] : null;
 }
 
+// The /articles list and an issue's page render the same `app-card-open`
+// cards, so both crawls read them through here.
+async function readArticleCards(page: Page): Promise<SpringerListArticle[]> {
+  const cards = page.locator("article.app-card-open");
+  const count = await cards.count();
+  const articles: SpringerListArticle[] = [];
+
+  for (let i = 0; i < count; i++) {
+    const card = cards.nth(i);
+    const link = card.locator('a[href*="/article/"]').first();
+    const href = await link.getAttribute("href").catch(() => null);
+    if (!href) continue;
+    const doi = doiFromHref(href);
+    if (!doi) continue;
+
+    const title = (await link.innerText().catch(() => "")).trim();
+    const metaItems = await card.locator(".c-meta__item").allInnerTexts().catch(() => []);
+    const cleaned = metaItems.map((t) => t.trim()).filter(Boolean);
+    const section = cleaned[0] ?? null;
+    const openAccess = cleaned.some((t) => /open access/i.test(t));
+    // On /articles the date is the last c-meta__item, but issue pages add a
+    // trailing "Pages: 20143 - 20159" item after it, so match the date's
+    // shape ("02 October 2025") rather than its position.
+    const publishedDate =
+      cleaned.find((t) => /^\d{1,2}\s+[A-Za-z]+\s+\d{4}$/.test(t)) ??
+      [...cleaned].reverse().find((t) => !/open access|^pages?:/i.test(t) && t !== section) ??
+      null;
+
+    articles.push({ doi, href, title, section, publishedDate, openAccess });
+  }
+  return articles;
+}
+
 /** Crawls one page of a journal's article list (50 articles/page on Springer). */
 export async function fetchJournalListPage(
   journalId: string,
@@ -123,42 +156,104 @@ export async function fetchJournalListPage(
   const url = `https://link.springer.com/journal/${journalId}/articles?page=${pageNum}`;
   return withPage(async (page) => {
     await openPage(page, url, "article.app-card-open");
-
-    const cards = page.locator("article.app-card-open");
-    const count = await cards.count();
-    const articles: SpringerListArticle[] = [];
-
-    for (let i = 0; i < count; i++) {
-      const card = cards.nth(i);
-      const link = card.locator('a[href*="/article/"]').first();
-      const href = await link.getAttribute("href").catch(() => null);
-      if (!href) continue;
-      const doi = doiFromHref(href);
-      if (!doi) continue;
-
-      const title = (await link.innerText().catch(() => "")).trim();
-      const metaItems = await card.locator(".c-meta__item").allInnerTexts().catch(() => []);
-      const cleaned = metaItems.map((t) => t.trim()).filter(Boolean);
-      const section = cleaned[0] ?? null;
-      const openAccess = cleaned.some((t) => /open access/i.test(t));
-      // The date is always the last c-meta__item; everything else (type,
-      // "Open access") is a fixed prefix of varying length.
-      const publishedDate = cleaned.length > 0 ? cleaned[cleaned.length - 1] : null;
-
-      articles.push({
-        doi,
-        href,
-        title,
-        section,
-        publishedDate: publishedDate && /open access/i.test(publishedDate) ? null : publishedDate,
-        openAccess,
-      });
-    }
+    const articles = await readArticleCards(page);
 
     // "Showing 1-50 of 48,082 articles"
     const bodyText = await page.locator("body").innerText().catch(() => "");
     const totalMatch = bodyText.match(/of\s+([\d,]+)\s+articles?/i);
     const totalArticles = totalMatch ? parseInt(totalMatch[1].replace(/,/g, ""), 10) : null;
+
+    return { articles, totalArticles };
+  }, opts);
+}
+
+export type SpringerIssueRef = {
+  issue: string; // usually a number, but kept as Springer's own label (e.g. "1-2" for a combined issue)
+  month: string | null; // e.g. "November 2025"
+  title: string | null; // special-issue caption, when there is one
+};
+
+export type SpringerVolume = {
+  volume: number;
+  period: string | null; // e.g. "January - December 2025"
+  issues: SpringerIssueRef[];
+};
+
+/**
+ * Reads a journal's whole volumes-and-issues index (every volume with its
+ * year range and every issue with its month — Springer renders it all on
+ * one page), newest volume first, as the site lists it.
+ */
+export async function fetchJournalVolumes(journalId: string, opts: CrawlOptions = {}): Promise<SpringerVolume[]> {
+  const url = `https://link.springer.com/journal/${journalId}/volumes-and-issues`;
+  return withPage(async (page) => {
+    await openPage(page, url, "li.app-vol-and-issues-item");
+    return page.locator("li.app-vol-and-issues-item").evaluateAll((items) =>
+      items.flatMap((item) => {
+        const heading = item.querySelector("h2");
+        const volMatch = heading?.querySelector("span")?.textContent?.match(/Volume\s+(\d+)/i);
+        if (!volMatch) return [];
+        const issues = Array.from(item.querySelectorAll("li.c-list-group__item")).flatMap((li) => {
+          const href = li.querySelector("a")?.getAttribute("href") ?? "";
+          const issueMatch = href.match(/\/volumes-and-issues\/\d+-([^/?#]+)/);
+          if (!issueMatch) return [];
+          // Anything after the link and month (e.g. "SI: Honoring the Legacy of …")
+          const extra = Array.from(li.childNodes)
+            .filter((n) => n.nodeName !== "A" && n.nodeName !== "TIME")
+            .map((n) => n.textContent?.trim() ?? "")
+            .filter(Boolean)
+            .join(" ");
+          return [
+            {
+              issue: decodeURIComponent(issueMatch[1]),
+              month: li.querySelector("time")?.textContent?.trim() || null,
+              title: extra || null,
+            },
+          ];
+        });
+        return [
+          {
+            volume: parseInt(volMatch[1], 10),
+            period: heading?.querySelector("time")?.textContent?.trim() || null,
+            issues,
+          },
+        ];
+      })
+    );
+  }, opts);
+}
+
+/**
+ * Crawls every article in one issue (`/volumes-and-issues/<volume>-<issue>`).
+ * An issue normally fits on one page; if its "N articles in this issue" count
+ * says otherwise, follows `?page=` until no new articles turn up.
+ */
+export async function fetchIssueArticles(
+  journalId: string,
+  volume: number,
+  issue: string,
+  opts: CrawlOptions = {}
+): Promise<SpringerListPage> {
+  const base = `https://link.springer.com/journal/${journalId}/volumes-and-issues/${volume}-${encodeURIComponent(issue)}`;
+  return withPage(async (page) => {
+    await openPage(page, base, "article.app-card-open");
+    const articles = await readArticleCards(page);
+
+    // "40 articles in this issue"
+    const bodyText = await page.locator("body").innerText().catch(() => "");
+    const totalMatch = bodyText.match(/([\d,]+)\s+articles?\s+in\s+this\s+issue/i);
+    const totalArticles = totalMatch ? parseInt(totalMatch[1].replace(/,/g, ""), 10) : null;
+
+    const seen = new Set(articles.map((a) => a.doi));
+    for (let p = 2; totalArticles != null && seen.size < totalArticles && p <= 20; p++) {
+      await openPage(page, `${base}?page=${p}`, "article.app-card-open");
+      const fresh = (await readArticleCards(page)).filter((a) => !seen.has(a.doi));
+      if (fresh.length === 0) break;
+      for (const a of fresh) {
+        seen.add(a.doi);
+        articles.push(a);
+      }
+    }
 
     return { articles, totalArticles };
   }, opts);

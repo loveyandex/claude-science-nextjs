@@ -44,6 +44,9 @@ class Settings:
     gemma_model: str
     pdf_dpi: int
     poppler_path: str | None
+    # Explicit proxy for the DOI vision provider calls; unset means direct
+    # (the Windows system proxy is deliberately ignored).
+    vision_http_proxy: str | None
 
     # --- Qdrant embedding -------------------------------------------------
     qdrant_url: str
@@ -73,6 +76,7 @@ class Settings:
             gemma_model=_str_env("GEMMA_MODEL_NAME", "gemma-4-31b"),
             pdf_dpi=_int_env("PDF_RENDER_DPI", 400),
             poppler_path=_str_env("POPPLER_PATH") or None,
+            vision_http_proxy=_str_env("VISION_HTTP_PROXY") or None,
             qdrant_url=_str_env("QDRANT_URL", "http://localhost:6333"),
             qdrant_api_key=_str_env("QDRANT_API_KEY") or None,
             qdrant_timeout_seconds=_int_env("QDRANT_TIMEOUT_SECONDS", 120),

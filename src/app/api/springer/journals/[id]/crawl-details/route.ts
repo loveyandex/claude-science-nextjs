@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 import { fetchArticleDetail, SpringerCrawlError } from "@/lib/springer";
+import { parseScopeDois } from "@/lib/springer-save";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -24,7 +25,8 @@ function encodeEvent(ev: Event) {
 // in abstract/openAccess/content. Split from crawl-list because visiting
 // every article is ~50x the requests of listing them, and a paywalled
 // article only ever yields an abstract — no point fetching it during the
-// cheap list pass.
+// cheap list pass. An optional `dois` body field limits the batch to those
+// articles (e.g. the ones the last stage-1 run saved).
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const auth = await getAuthFromRequest(req);
   if (!auth) return unauthorized();
@@ -32,19 +34,21 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const body = await req.json().catch(() => ({}));
   const limit = Math.min(50, Math.max(1, typeof body?.limit === "number" ? body.limit : DEFAULT_BATCH_LIMIT));
   const headless = body?.headless === true;
+  const dois = parseScopeDois(body?.dois);
+  if (dois && "error" in dois) return Response.json({ error: dois.error }, { status: 400 });
 
   const journal = await prisma.springerJournal.findUnique({ where: { id: params.id } });
   if (!journal) return Response.json({ error: "Journal not found" }, { status: 404 });
+
+  const where = { journalId: journal.id, status: "pending", ...(dois ? { doi: { in: dois } } : {}) };
 
   const stream = new ReadableStream({
     async start(controller) {
       const send = (ev: Event) => controller.enqueue(encodeEvent(ev));
 
-      const pendingTotal = await prisma.springerArticle.count({
-        where: { journalId: journal.id, status: "pending" },
-      });
+      const pendingTotal = await prisma.springerArticle.count({ where });
       const batch = await prisma.springerArticle.findMany({
-        where: { journalId: journal.id, status: "pending" },
+        where,
         orderBy: { createdAt: "asc" },
         take: limit,
       });

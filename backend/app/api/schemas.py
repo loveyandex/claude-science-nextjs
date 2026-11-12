@@ -7,6 +7,8 @@ so no service ever sees a JSON-shaped object.
 
 from __future__ import annotations
 
+from typing import Literal
+
 from pydantic import BaseModel, Field
 
 from app.domain.models import ChunkingPolicy, PageEmbeddingResult, PageToEmbed, SearchHit
@@ -31,7 +33,11 @@ class IndexArticleRequest(BaseModel):
 
 
 class VisionProviderPayload(BaseModel):
-    baseUrl: str
+    # AiProvider.type — picks the wire protocol (see build_vision_transcriber).
+    type: Literal["openai-compatible", "google"] = "openai-compatible"
+    # Required for openai-compatible; optional for google (Google's own
+    # endpoint when omitted).
+    baseUrl: str | None = None
     apiKey: str | None = None
     model: str
 

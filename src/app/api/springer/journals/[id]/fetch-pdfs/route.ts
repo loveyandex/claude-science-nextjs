@@ -3,6 +3,7 @@ import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 import { getSpringerSettings } from "@/lib/springer-settings";
 import { registerDownloadedPdf } from "@/lib/article-by-doi";
 import { buildProviderUrl, fetchPdfFromProvider, ProviderBrowser, savePdf } from "@/lib/springer-pdf";
+import { parseScopeDois } from "@/lib/springer-save";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -31,7 +32,8 @@ function encodeEvent(ev: Event) {
 // provider (<providerUrl>/<doi>) and stores it on disk. Picks up articles
 // never tried (pdfStatus null) and previous hard failures; "not_found"
 // rows are only retried when the caller asks, since the provider already
-// answered for them.
+// answered for them. An optional `dois` body field limits the batch to
+// those articles.
 export async function POST(req: Request, { params }: { params: { id: string } }) {
   const auth = await getAuthFromRequest(req);
   if (!auth) return unauthorized();
@@ -39,6 +41,8 @@ export async function POST(req: Request, { params }: { params: { id: string } })
   const body = await req.json().catch(() => ({}));
   const limit = Math.min(50, Math.max(1, typeof body?.limit === "number" ? body.limit : DEFAULT_BATCH_LIMIT));
   const retryNotFound = body?.retryNotFound === true;
+  const dois = parseScopeDois(body?.dois);
+  if (dois && "error" in dois) return Response.json({ error: dois.error }, { status: 400 });
 
   const { pdfProviderUrl, challengeTimeoutSec } = await getSpringerSettings();
   if (!pdfProviderUrl) {
@@ -53,6 +57,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const where = {
     journalId: journal.id,
+    ...(dois ? { doi: { in: dois } } : {}),
     OR: [
       { pdfStatus: null },
       { pdfStatus: "failed" },

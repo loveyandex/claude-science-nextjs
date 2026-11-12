@@ -1,6 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
 import { fetchJournalListPage, SpringerCrawlError } from "@/lib/springer";
+import { saveListArticles } from "@/lib/springer-save";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 300;
@@ -9,7 +10,7 @@ const DEFAULT_PAGE_COUNT = 3;
 
 type Event =
   | { type: "page_start"; page: number; index: number; total: number }
-  | { type: "page_done"; page: number; found: number; totalArticles: number | null }
+  | { type: "page_done"; page: number; found: number; added: number; totalArticles: number | null; dois: string[] }
   | { type: "stopped"; reason: string }
   | { type: "done"; pagesCrawled: number; articlesFound: number }
   | { type: "fatal"; message: string };
@@ -65,27 +66,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           break;
         }
 
-        for (const a of result.articles) {
-          await prisma.springerArticle.upsert({
-            where: { doi: a.doi },
-            create: {
-              journalId: journal.id,
-              doi: a.doi,
-              href: a.href,
-              title: a.title,
-              section: a.section,
-              publishedDate: a.publishedDate,
-              openAccess: a.openAccess,
-              status: "pending",
-            },
-            update: {
-              title: a.title,
-              section: a.section,
-              publishedDate: a.publishedDate,
-              openAccess: a.openAccess,
-            },
-          });
-        }
+        const added = await saveListArticles(journal.id, result.articles);
 
         cursor = nextPage;
         pagesCrawled++;
@@ -99,7 +80,14 @@ export async function POST(req: Request, { params }: { params: { id: string } })
           },
         });
 
-        send({ type: "page_done", page: nextPage, found: result.articles.length, totalArticles: result.totalArticles });
+        send({
+          type: "page_done",
+          page: nextPage,
+          found: result.articles.length,
+          added,
+          totalArticles: result.totalArticles,
+          dois: result.articles.map((a) => a.doi),
+        });
       }
 
       send({ type: "done", pagesCrawled, articlesFound });
