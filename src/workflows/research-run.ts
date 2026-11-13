@@ -3,7 +3,7 @@ import { isStepCount, type ModelMessage } from "ai";
 import { sleep } from "workflow";
 import { buildModel } from "@/lib/research/model";
 import { dropUnansweredToolCalls, stripReasoningFor } from "@/lib/research/prompt-shaping";
-import { researchInstructions, runKickoffMessage } from "@/lib/research/prompts";
+import { PLAN_WRAP_UP, researchInstructions, runKickoffMessage } from "@/lib/research/prompts";
 import { RESEARCH_TOOLS } from "@/lib/research/tool-defs";
 import { buildTools } from "@/workflows/research-tools";
 import {
@@ -134,6 +134,14 @@ export async function researchRunWorkflow(input: RunInput) {
               activeTools: [],
               system: `${instructions}\n\nYour step budget is used up. Do not call any tools. Reply now with the final report in markdown, based on what you found so far.`,
             }
+          : left === 1
+            ? {
+                // Closes out the plan while a tool is still allowed, so the run's
+                // final status reflects what was actually done.
+                activeTools: ["updatePlan"],
+                toolChoice: { type: "tool" as const, toolName: "updatePlan" },
+                system: `${instructions}\n\n${PLAN_WRAP_UP}`,
+              }
           : used >= Math.floor(input.maxSteps * 0.6)
             ? {
                 system: `${instructions}\n\nBudget check: ${left} step(s) left before the report. Stop broad searching — read the most relevant pages you've found and record findings for what you verify.`,

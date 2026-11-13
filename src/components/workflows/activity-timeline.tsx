@@ -25,6 +25,7 @@ const TYPE_META: Record<string, { icon: typeof Brain; className: string }> = {
   run_queued: { icon: Clock, className: "text-info" },
   run_started: { icon: Play, className: "text-accent" },
   run_completed: { icon: CheckCircle2, className: "text-success" },
+  run_partial: { icon: AlertTriangle, className: "text-warning" },
   run_failed: { icon: XCircle, className: "text-destructive" },
   run_cancelled: { icon: CircleStop, className: "text-warning" },
   thinking: { icon: Brain, className: "text-muted-foreground" },
@@ -40,7 +41,7 @@ export const ACTIVITY_FILTERS = [
   { id: "findings", label: "findings", types: ["finding"] },
   { id: "notes", label: "notes & plan", types: ["note", "plan", "thinking"] },
   { id: "tools", label: "tool calls", types: ["tool"] },
-  { id: "runs", label: "run events", types: ["run_queued", "run_started", "run_completed", "run_failed", "run_cancelled", "brief_updated"] },
+  { id: "runs", label: "run events", types: ["run_queued", "run_started", "run_completed", "run_partial", "run_failed", "run_cancelled", "brief_updated"] },
 ] as const;
 
 function prettyJson(value: unknown): string {

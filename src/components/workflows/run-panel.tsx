@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2, Circle, CircleDot, CircleSlash, Coins, Cpu, Footprints, Timer, Wrench } from "lucide-react";
+import { CheckCircle2, Circle, CircleDashed, CircleDot, CircleSlash, Coins, Cpu, Footprints, Timer, Wrench } from "lucide-react";
 import { Progress } from "@/components/ui/progress";
 import { StatusBadge, duration, isActive } from "@/components/workflows/status";
 import type { PlanStep, RunRecord } from "@/components/workflows/types";
@@ -12,6 +12,8 @@ const PLAN_ICON = {
   done: { icon: CheckCircle2, className: "text-success" },
   skipped: { icon: CircleSlash, className: "text-muted-foreground/60" },
 } as const;
+// A todo/doing step in a run that has ended was never finished.
+const UNFINISHED = { icon: CircleDashed, className: "text-warning" };
 
 function formatTokens(n: number) {
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)}M`;
@@ -24,6 +26,9 @@ export function RunPanel({ run, now }: { run: RunRecord; now: number }) {
   const active = isActive(run.status);
   const plan = Array.isArray(run.plan) ? (run.plan as PlanStep[]) : [];
   const done = plan.filter((s) => s.status === "done").length;
+  const skipped = plan.filter((s) => s.status === "skipped").length;
+  const open = plan.length - done - skipped;
+  const ended = !active && run.status !== "queued";
   const pct = run.maxSteps > 0 ? (run.stepCount / run.maxSteps) * 100 : 0;
 
   return (
@@ -66,11 +71,14 @@ export function RunPanel({ run, now }: { run: RunRecord; now: number }) {
             <span>plan</span>
             <span>
               {done}/{plan.length} done
+              {skipped > 0 && ` · ${skipped} skipped`}
+              {ended && open > 0 && <span className="text-warning"> · {open} not finished</span>}
             </span>
           </div>
           <ol className="space-y-1">
             {plan.map((step, i) => {
-              const meta = PLAN_ICON[step.status] ?? PLAN_ICON.todo;
+              const unfinished = ended && (step.status === "todo" || step.status === "doing");
+              const meta = unfinished ? UNFINISHED : (PLAN_ICON[step.status] ?? PLAN_ICON.todo);
               const Icon = meta.icon;
               return (
                 <li key={i} className="flex items-start gap-2 text-[13px]">
@@ -80,11 +88,14 @@ export function RunPanel({ run, now }: { run: RunRecord; now: number }) {
                       className={cn(
                         step.status === "done" && "text-muted-foreground",
                         step.status === "skipped" && "text-muted-foreground line-through",
-                        step.status === "doing" && "font-medium"
+                        step.status === "doing" && !unfinished && "font-medium"
                       )}
                     >
                       {step.title}
                     </span>
+                    {unfinished && (
+                      <span className="ms-1.5 font-mono text-[10px] uppercase tracking-wide text-warning">not finished</span>
+                    )}
                     {step.note && <p className="font-mono text-[10.5px] text-muted-foreground">{step.note}</p>}
                   </div>
                 </li>

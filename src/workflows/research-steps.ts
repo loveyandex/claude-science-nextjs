@@ -174,11 +174,22 @@ export async function finishRunStep(args: {
     }
   }
 
+  // "completed" means the plan was carried out, not just that the run ended:
+  // one that reported with plan steps still open is "partial".
+  let status: "completed" | "partial" | "failed" = args.status;
+  let openSteps: string[] = [];
+  if (args.status === "completed") {
+    const run = await prisma.researchRun.findUnique({ where: { id: args.runId }, select: { plan: true } });
+    const plan = Array.isArray(run?.plan) ? (run.plan as { title?: string; status?: string }[]) : [];
+    openSteps = plan.filter((s) => s.status === "todo" || s.status === "doing").map((s) => s.title ?? "untitled step");
+    if (openSteps.length > 0) status = "partial";
+  }
+
   // A cancel (or an earlier finish) already set a terminal status — keep it.
   const updated = await prisma.researchRun.updateMany({
     where: { id: args.runId, status: { in: ["queued", "running"] } },
     data: {
-      status: args.status,
+      status,
       report,
       error: args.error,
       stepCount: args.steps,
@@ -188,9 +199,9 @@ export async function finishRunStep(args: {
   if (updated.count === 0) return;
   await prisma.researchWorkflow.updateMany({
     where: { id: args.workflowId, currentRunId: args.runId },
-    data: { status: args.status },
+    data: { status },
   });
-  if (args.status === "completed") {
+  if (status === "completed") {
     await addEvent(
       args.workflowId,
       args.runId,
@@ -198,6 +209,15 @@ export async function finishRunStep(args: {
       `Run #${args.number} completed`,
       report ? report.slice(0, 600) : null,
       { steps: args.steps }
+    );
+  } else if (status === "partial") {
+    await addEvent(
+      args.workflowId,
+      args.runId,
+      "run_partial",
+      `Run #${args.number} finished with ${openSteps.length} plan step(s) not done`,
+      `Not done:\n${openSteps.map((t) => `- ${t}`).join("\n")}${report ? `\n\n${report.slice(0, 600)}` : ""}`,
+      { steps: args.steps, openSteps }
     );
   } else {
     await addEvent(args.workflowId, args.runId, "run_failed", `Run #${args.number} failed`, args.error, { steps: args.steps });

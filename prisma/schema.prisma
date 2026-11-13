@@ -312,7 +312,7 @@ model ResearchWorkflow {
   modelWireId  String?
   // Upper bound on model calls per run (cost/latency control).
   maxSteps     Int      @default(40)
-  // "draft" (never run) | "running" | "completed" | "failed" | "cancelled" — mirrors the latest run.
+  // "draft" (never run) | "running" | "completed" | "partial" | "failed" | "cancelled" — mirrors the latest run.
   status       String   @default("draft")
   currentRunId String?
   chatMessages Json     @default("[]")
@@ -336,7 +336,7 @@ model ResearchRun {
   number      Int              // 1-based, per workflow
   // Workflow DevKit run id (wrun_…); null until start() returned.
   wfRunId     String?          @unique
-  // "queued" | "running" | "completed" | "failed" | "cancelled"
+  // "queued" | "running" | "completed" (plan finished) | "partial" (reported, plan steps left open) | "failed" | "cancelled"
   status      String           @default("queued")
   brief       String           // brief as it was when the run started
   modelWireId String?

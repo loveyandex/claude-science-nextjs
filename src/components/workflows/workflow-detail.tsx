@@ -291,7 +291,7 @@ export function WorkflowDetail({ id }: { id: string }) {
                         isActive(r.status) && "animate-pulse bg-accent",
                         r.status === "completed" && "bg-success",
                         r.status === "failed" && "bg-destructive",
-                        r.status === "cancelled" && "bg-warning"
+                        (r.status === "cancelled" || r.status === "partial") && "bg-warning"
                       )}
                     />
                   </button>

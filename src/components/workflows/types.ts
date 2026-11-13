@@ -1,7 +1,7 @@
 import type { UIMessage } from "ai";
 
-export type WorkflowStatus = "draft" | "running" | "completed" | "failed" | "cancelled";
-export type RunStatus = "queued" | "running" | "completed" | "failed" | "cancelled";
+export type WorkflowStatus = "draft" | "running" | "completed" | "partial" | "failed" | "cancelled";
+export type RunStatus = "queued" | "running" | "completed" | "partial" | "failed" | "cancelled";
 
 export type PlanStep = { title: string; status: "todo" | "doing" | "done" | "skipped"; note?: string };
 

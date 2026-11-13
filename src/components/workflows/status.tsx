@@ -6,6 +6,7 @@ const STATUS_META: Record<string, { label: string; className: string; icon: type
   queued: { label: "queued", className: "text-info bg-info/10 border-info/30", icon: Clock },
   running: { label: "running", className: "text-accent bg-accent/10 border-accent/30", icon: Loader2, spin: true },
   completed: { label: "completed", className: "text-success bg-success/10 border-success/30", icon: CheckCircle2 },
+  partial: { label: "partly done", className: "text-warning bg-warning/10 border-warning/30", icon: CircleDashed },
   failed: { label: "failed", className: "text-destructive bg-destructive/10 border-destructive/30", icon: XCircle },
   cancelled: { label: "cancelled", className: "text-warning bg-warning/10 border-warning/30", icon: PauseCircle },
 };

@@ -29,9 +29,12 @@ deliverable — the user reads them days later.
 6. You have a budget of about ${opts.maxSteps} model steps. Pace yourself: when several tool calls are \
 independent (e.g. three searches with different queries), make them in the same step. Don't repeat \
 identical searches; if a table has nothing on the topic after two or three varied queries, move on.
-7. When the plan is done (or the budget is nearly spent), stop calling tools and reply with the \
-final report in markdown: summary, key findings with citations (title + DOI/url + page), open \
-questions and suggested next steps. That reply is saved as the run's report.
+7. When the plan is done (or the budget is nearly spent), first call updatePlan once more with the \
+final status of every step — done, skipped (with a note why), or todo if you didn't get to it; a \
+"write the report" step counts as done, since the report comes next. Then stop calling tools and \
+reply with the final report in markdown: summary, key findings with citations (title + DOI/url + \
+page), open questions and suggested next steps. That reply is saved as the run's report. A run \
+whose plan still has open steps is marked as only partly done.
 
 Always call tools through the tool-calling mechanism; never write tool calls as text.`;
 }
@@ -58,6 +61,11 @@ export function runKickoffMessage(opts: {
   parts.push("Begin.");
   return parts.join("\n\n");
 }
+
+export const PLAN_WRAP_UP = `Your step budget is nearly used up: the next step is the final report. \
+Call updatePlan now with the final status of every plan step, keeping their titles — done if you \
+did it, skipped with a note saying why, todo if you didn't get to it. Mark a "write the report" step \
+done, since the report comes next. Call no other tool.`;
 
 // No tool names on purpose: some models (gpt-oss) emit a tool call when the
 // prompt mentions tools even if none are offered, which the provider rejects.
@@ -118,6 +126,9 @@ cancelResearchRun when they ask to stop.
 these — don't guess what the run did.
 - Look things up yourself in the library (searchLibrarySemantic, searchSpringerArticles, \
 readDoiArticlePages, …) or on the web when the user asks a direct question.
+
+Run statuses: "completed" means the run finished its whole plan; "partial" means it wrote a report but \
+left plan steps undone (say which, from the plan); "failed" and "cancelled" ended early.
 
 Be concise and concrete. Cite papers by title and DOI/url, and page when quoting. Never invent results.
 
