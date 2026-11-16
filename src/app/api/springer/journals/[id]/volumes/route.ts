@@ -1,6 +1,6 @@
 import { prisma } from "@/lib/prisma";
 import { getAuthFromRequest, unauthorized } from "@/lib/auth";
-import { fetchJournalVolumes, SpringerCrawlError } from "@/lib/springer";
+import { loadJournalVolumes, SpringerCrawlError } from "@/lib/springer";
 
 export const dynamic = "force-dynamic";
 export const maxDuration = 120;
@@ -17,7 +17,7 @@ export async function GET(req: Request, { params }: { params: { id: string } }) 
 
   const headless = new URL(req.url).searchParams.get("headless") === "1";
   try {
-    const volumes = await fetchJournalVolumes(journal.journalId, { headless });
+    const volumes = await loadJournalVolumes(journal.journalId, { headless }, true);
     if (volumes.length === 0) {
       return Response.json({ error: "No volumes found on the journal's volumes-and-issues page" }, { status: 502 });
     }

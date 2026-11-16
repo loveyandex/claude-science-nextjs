@@ -24,15 +24,19 @@ export function parseScopeDois(value: unknown): string[] | undefined | { error: 
  * them weren't in the database before, since the page and issue crawls
  * overlap and re-seeing an article is normal.
  */
-export async function saveListArticles(journalDbId: string, articles: SpringerListArticle[]): Promise<number> {
-  const existing = await prisma.springerArticle.findMany({
+export async function saveListArticles(
+  journalDbId: string,
+  articles: SpringerListArticle[],
+  db: Pick<typeof prisma, "springerArticle"> = prisma
+): Promise<number> {
+  const existing = await db.springerArticle.findMany({
     where: { doi: { in: articles.map((a) => a.doi) } },
     select: { doi: true },
   });
   const known = new Set(existing.map((e) => e.doi));
 
   for (const a of articles) {
-    await prisma.springerArticle.upsert({
+    await db.springerArticle.upsert({
       where: { doi: a.doi },
       create: {
         journalId: journalDbId,

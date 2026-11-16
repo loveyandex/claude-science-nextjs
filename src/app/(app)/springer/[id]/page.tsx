@@ -61,6 +61,7 @@ type SpringerVolume = {
 // The articles a stage-1 run saved (new or already known), so stages 2 and
 // 3 can be pointed at just them.
 type LastRun = { label: string; dois: string[]; at: string };
+type IssueCrawl = { volume: number; issue: string; crawledAt: string; complete: boolean; count: number };
 
 type ScopeStats = StageStats & { total: number; indexed: number; failed: number; vlm: VlmCounts };
 
@@ -92,6 +93,8 @@ export default function SpringerJournalDetailPage() {
   const [volumes, setVolumes] = useState<SpringerVolume[] | null>(null);
   const [loadingVolumes, setLoadingVolumes] = useState(false);
   const [volumesError, setVolumesError] = useState<string | null>(null);
+  const [coverage, setCoverage] = useState<IssueCrawl[]>([]);
+  const stopCrawl = useRef(false);
   const [lastRun, setLastRun] = useState<LastRun | null>(null);
   const [scopeLastRun, setScopeLastRun] = useStoredBool("springer:scope:lastRun", true);
   const [scopeStats, setScopeStats] = useState<ScopeStats | null>(null);
@@ -103,6 +106,7 @@ export default function SpringerJournalDetailPage() {
   const appendLog = (line: string) => setLog((l) => [...l, line].slice(-MAX_LOG_LINES));
 
   const selectedVolume = volumes?.find((v) => v.volume === volumeNum) ?? null;
+  const issueCoverage = new Map(coverage.map((item) => [`${item.volume}/${item.issue}`, item]));
   const issueLo = Math.min(issueFrom, issueTo);
   const issueHi = Math.max(issueFrom, issueTo);
   // With the index loaded, crawl the issues that actually exist in the range
@@ -170,6 +174,19 @@ export default function SpringerJournalDetailPage() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   useEffect(loadScopeStats, [authFetch, journalDbId, lastRun]);
 
+  const loadCoverage = async () => {
+    const res = await authFetch(`/api/springer/journals/${journalDbId}/crawl-issues`, { cache: "no-store" });
+    if (!res.ok) throw new Error("Could not load saved issue coverage");
+    const data = await res.json();
+    setCoverage(data.coverage);
+    return data.coverage as IssueCrawl[];
+  };
+
+  useEffect(() => {
+    void loadCoverage().catch((err) => setVolumesError(err.message));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authFetch, journalDbId]);
+
   const loadVolumes = async () => {
     setLoadingVolumes(true);
     setVolumesError(null);
@@ -186,6 +203,7 @@ export default function SpringerJournalDetailPage() {
       if (!data.volumes.some((v: SpringerVolume) => v.volume === volumeNum) && data.volumes[0]) {
         pickVolume(data.volumes[0]);
       }
+      return data.volumes as SpringerVolume[];
     } catch (err) {
       setVolumesError(err instanceof Error ? err.message : "Failed to load volumes");
     } finally {
@@ -233,31 +251,44 @@ export default function SpringerJournalDetailPage() {
     jobProgress.current = key;
   };
 
-  const crawlList = async () => {
+  const crawlList = async (mode: "batch" | "all" | "recent" = "batch") => {
     setCrawlingList(true);
+    stopCrawl.current = false;
     setLog([]);
     const dois: string[] = [];
     const pages: number[] = [];
     try {
-      await runNdjsonStream(
-        authFetch,
-        `/api/springer/journals/${journalDbId}/crawl-list`,
-        { pageCount, headless: listHeadless },
-        (ev) => {
-          if (ev.type === "page_start") appendLog(`Fetching list page ${ev.page}…`);
-          if (ev.type === "page_done") {
-            appendLog(`Page ${ev.page}: found ${ev.found} articles, ${ev.added} new`);
-            dois.push(...(ev.dois as string[]));
-            pages.push(ev.page as number);
-            const label =
-              pages.length === 1 ? `list page ${pages[0]}` : `list pages ${pages[0]}–${pages[pages.length - 1]}`;
-            saveLastRun({ label, dois: [...dois], at: new Date().toISOString() });
+      let finished = false;
+      do {
+        let pagesInBatch = 0;
+        await runNdjsonStream(
+          authFetch,
+          `/api/springer/journals/${journalDbId}/crawl-list`,
+          { pageCount, headless: listHeadless, refreshRecent: mode === "recent" },
+          (ev) => {
+            if (ev.type === "page_start") appendLog(`Fetching list page ${ev.page}…`);
+            if (ev.type === "page_done") {
+              pagesInBatch++;
+              appendLog(`Page ${ev.page}: found ${ev.found} articles, ${ev.added} new`);
+              if (typeof ev.totalArticles === "number" && Number(ev.page) * 50 >= ev.totalArticles) finished = true;
+              if (mode === "all") return;
+              dois.push(...(ev.dois as string[]));
+              pages.push(ev.page as number);
+              const label =
+                pages.length === 1 ? `list page ${pages[0]}` : `list pages ${pages[0]}–${pages[pages.length - 1]}`;
+              saveLastRun({ label, dois: [...dois], at: new Date().toISOString() });
+            }
+            if (ev.type === "stopped") {
+              finished = true;
+              appendLog(`Stopped: ${ev.reason}`);
+            }
+            if (ev.type === "done") appendLog(`Done — ${ev.pagesCrawled} pages, ${ev.articlesFound} articles saved`);
+            if (ev.type === "fatal") throw new Error(String(ev.message));
           }
-          if (ev.type === "stopped") appendLog(`Stopped: ${ev.reason}`);
-          if (ev.type === "done") appendLog(`Done — ${ev.pagesCrawled} pages, ${ev.articlesFound} articles saved`);
-          if (ev.type === "fatal") appendLog(`Fatal: ${ev.message}`);
-        }
-      );
+        );
+        if (pagesInBatch === 0) finished = true;
+      } while (mode === "all" && !finished && !stopCrawl.current);
+      if (stopCrawl.current) appendLog("Paused. Continue crawling pages to resume.");
     } catch (err) {
       appendLog(err instanceof Error ? err.message : "Crawl failed");
     } finally {
@@ -267,47 +298,78 @@ export default function SpringerJournalDetailPage() {
     }
   };
 
-  const crawlIssues = async () => {
+  const crawlIssues = async (all = false) => {
     setCrawlingList(true);
+    stopCrawl.current = false;
     setLog([]);
     const dois: string[] = [];
     const done: string[] = [];
     try {
-      await runNdjsonStream(
-        authFetch,
-        `/api/springer/journals/${journalDbId}/crawl-issues`,
-        { volume: volumeNum, issues: issuesToCrawl.map((i) => i.issue), headless: listHeadless },
-        (ev) => {
-          if (ev.type === "issue_start") appendLog(`[${ev.index}/${ev.total}] Fetching volume ${ev.volume}, issue ${ev.issue}…`);
-          if (ev.type === "issue_done") {
-            appendLog(
-              `Issue ${ev.issue}: found ${ev.found}${ev.totalArticles != null ? ` of ${ev.totalArticles}` : ""} articles, ${ev.added} new`
-            );
-            dois.push(...(ev.dois as string[]));
-            done.push(ev.issue as string);
-            const label =
-              done.length === 1
-                ? `vol ${volumeNum} · issue ${done[0]}`
-                : `vol ${volumeNum} · issues ${done[0]}–${done[done.length - 1]}`;
-            saveLastRun({ label, dois: [...dois], at: new Date().toISOString() });
-          }
-          if (ev.type === "issue_error") appendLog(`✗ Issue ${ev.issue}: ${ev.message}`);
-          if (ev.type === "done") {
-            appendLog(`Done — ${ev.issuesCrawled} issues, ${ev.articlesFound} articles saved (${ev.articlesAdded} new)`);
-            if ((ev.articlesFound as number) > 0 && ev.articlesAdded === 0)
-              appendLog(
-                "All of them were already saved (e.g. by page mode), so the crawled count doesn't change — run steps 2 and 3 on \"last step 1 run\" to process just these."
-              );
-          }
-          if (ev.type === "fatal") appendLog(`Fatal: ${ev.message}`);
+      const catalog = all ? await loadVolumes() : null;
+      if (all && !catalog) return;
+      const saved = all ? await loadCoverage() : [];
+      const complete = new Set(saved.filter((item) => item.complete).map((item) => `${item.volume}/${item.issue}`));
+      const groups = catalog
+        ? catalog.map((v) => ({ volume: v.volume, issues: v.issues.map((i) => i.issue).filter((issue) => !complete.has(`${v.volume}/${issue}`)) }))
+        : [{ volume: volumeNum, issues: issuesToCrawl.map((i) => i.issue) }];
+      if (all) appendLog(`${groups.reduce((total, group) => total + group.issues.length, 0)} issues to check`);
+      for (const group of groups) {
+        const batchSize = all ? 3 : MAX_ISSUES_PER_RUN;
+        for (let offset = 0; offset < group.issues.length && !stopCrawl.current; offset += batchSize) {
+          await runNdjsonStream(
+            authFetch,
+            `/api/springer/journals/${journalDbId}/crawl-issues`,
+            { volume: group.volume, issues: group.issues.slice(offset, offset + batchSize), headless: listHeadless },
+            (ev) => {
+              if (ev.type === "issue_start") appendLog(`[${ev.index}/${ev.total}] Fetching volume ${ev.volume}, issue ${ev.issue}…`);
+              if (ev.type === "issue_done") {
+                appendLog(
+                  `Vol ${ev.volume} · issue ${ev.issue}: ${ev.cached ? "using saved list" : `found ${ev.found}, ${ev.added} new`}`
+                );
+                if (all) return;
+                dois.push(...(ev.dois as string[]));
+                done.push(ev.issue as string);
+                const label =
+                  done.length === 1
+                    ? `vol ${volumeNum} · issue ${done[0]}`
+                    : `vol ${volumeNum} · issues ${done[0]}–${done[done.length - 1]}`;
+                saveLastRun({ label, dois: [...dois], at: new Date().toISOString() });
+              }
+              if (ev.type === "issue_error") appendLog(`✗ Issue ${ev.issue}: ${ev.message}`);
+              if (ev.type === "done" && !all) {
+                appendLog(`Done — ${ev.issuesCrawled} issues, ${ev.articlesFound} articles saved (${ev.articlesAdded} new)`);
+                if ((ev.articlesFound as number) > 0 && ev.articlesAdded === 0)
+                  appendLog(
+                    "All of them were already saved (e.g. by page mode), so the crawled count doesn't change — run steps 2 and 3 on \"last step 1 run\" to process just these."
+                  );
+              }
+              if (ev.type === "fatal") throw new Error(String(ev.message));
+            }
+          );
         }
-      );
+        if (stopCrawl.current) break;
+      }
+      if (all) appendLog(stopCrawl.current ? "Paused. Run again to continue from saved coverage." : "Finished checking remaining issues. See the log for any failures.");
     } catch (err) {
       appendLog(err instanceof Error ? err.message : "Crawl failed");
     } finally {
       setCrawlingList(false);
+      void loadCoverage().catch((err) => setVolumesError(err.message));
       loadJournal();
       loadArticles();
+    }
+  };
+
+  const useSavedIssue = async (volume: number, issue: string) => {
+    try {
+      const query = new URLSearchParams({ volume: String(volume), issue });
+      const res = await authFetch(`/api/springer/journals/${journalDbId}/crawl-issues?${query}`);
+      if (!res.ok) throw new Error("Could not load the saved issue");
+      const { crawl } = await res.json();
+      saveLastRun({ label: `vol ${volume} · issue ${issue}`, dois: crawl.dois, at: crawl.crawledAt });
+      setScopeLastRun(true);
+    } catch (err) {
+      setVolumesError(err instanceof Error ? err.message : "Could not load the saved issue");
     }
   };
 
@@ -431,10 +493,15 @@ export default function SpringerJournalDetailPage() {
                 doi/title/href as a stub row.
               </p>
               <div className="flex items-center gap-2 flex-wrap">
-                <Button onClick={crawlList} disabled={busy} size="sm">
+                <Button onClick={() => void crawlList()} disabled={busy} size="sm">
                   {crawlingList ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
                   Crawl next batch
                 </Button>
+                <Button variant="outline" size="sm" onClick={() => void crawlList("all")} disabled={busy}>
+                  {journal.lastListPage ? "Continue crawling all pages" : "Crawl all pages"}
+                </Button>
+                <Button variant="ghost" size="sm" onClick={() => void crawlList("recent")} disabled={busy}>Refresh recent pages</Button>
+                {crawlingList && <Button variant="ghost" size="sm" onClick={() => { stopCrawl.current = true; }}>Pause after batch</Button>}
                 <NumberField label="pages" value={pageCount} onChange={setPageCount} max={20} width="w-14" disabled={crawlingList} />
                 <HeadlessToggle checked={listHeadless} onChange={setListHeadless} disabled={crawlingList} />
               </div>
@@ -460,7 +527,7 @@ export default function SpringerJournalDetailPage() {
                     {!selectedVolume && <option value="">volume {volumeNum} (not in index)</option>}
                     {volumes.map((v) => (
                       <option key={v.volume} value={String(v.volume)}>
-                        Vol {v.volume} — {v.period ?? "?"} ({v.issues.length} issues)
+                        Vol {v.volume} — {v.period ?? "?"} ({v.issues.filter((i) => issueCoverage.get(`${v.volume}/${i.issue}`)?.complete).length}/{v.issues.length} complete)
                       </option>
                     ))}
                   </select>
@@ -473,13 +540,17 @@ export default function SpringerJournalDetailPage() {
 
               <div className="flex items-center gap-2 flex-wrap">
                 <Button
-                  onClick={crawlIssues}
+                  onClick={() => void crawlIssues()}
                   disabled={busy || issuesToCrawl.length === 0 || issuesToCrawl.length > MAX_ISSUES_PER_RUN}
                   size="sm"
                 >
                   {crawlingList ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
                   Crawl {issuesToCrawl.length} issue{issuesToCrawl.length === 1 ? "" : "s"}
                 </Button>
+                <Button variant="outline" size="sm" onClick={() => void crawlIssues(true)} disabled={busy || loadingVolumes}>
+                  Crawl all remaining issues
+                </Button>
+                {crawlingList && <Button variant="ghost" size="sm" onClick={() => { stopCrawl.current = true; }}>Pause after batch</Button>}
                 <NumberField label="volume" value={volumeNum} onChange={setVolumeNum} disabled={crawlingList} />
                 <NumberField label="issues" value={issueFrom} onChange={setIssueFrom} disabled={crawlingList} />
                 <NumberField label="to" value={issueTo} onChange={setIssueTo} disabled={crawlingList} />
@@ -498,6 +569,25 @@ export default function SpringerJournalDetailPage() {
                       ].join(" · ")}
               </p>
               {volumesError && <p className="font-mono text-[10.5px] text-destructive mt-1">{volumesError}</p>}
+              {selectedVolume && (
+                <details className="mt-3 text-xs">
+                  <summary className="cursor-pointer">Issue coverage for volume {selectedVolume.volume}</summary>
+                  <ul className="mt-2 max-h-64 space-y-1 overflow-auto">
+                    {selectedVolume.issues.map(({ issue, month }) => {
+                      const saved = issueCoverage.get(`${selectedVolume.volume}/${issue}`);
+                      return (
+                        <li key={issue} className="flex flex-wrap items-center gap-x-2">
+                          <span>Issue {issue}{month ? ` · ${month}` : ""}</span>
+                          <span className="text-muted-foreground">
+                            {saved ? `${saved.complete ? "Crawled" : "Refreshable"} · ${saved.count} articles · ${new Date(saved.crawledAt).toLocaleDateString()}` : "Not yet verified"}
+                          </span>
+                          {saved && <Button variant="ghost" size="sm" disabled={busy} onClick={() => void useSavedIssue(selectedVolume.volume, issue)}>Use for steps 2–4</Button>}
+                        </li>
+                      );
+                    })}
+                  </ul>
+                </details>
+              )}
             </>
           )}
         </div>

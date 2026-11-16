@@ -30,6 +30,7 @@ export async function POST(req: Request, { params }: { params: { id: string } })
 
   const body = await req.json().catch(() => ({}));
   const headless = body?.headless === true;
+  const refreshRecent = body?.refreshRecent === true;
   const pageCount = Math.min(
     20,
     Math.max(1, typeof body?.pageCount === "number" ? body.pageCount : DEFAULT_PAGE_COUNT)
@@ -43,54 +44,62 @@ export async function POST(req: Request, { params }: { params: { id: string } })
       const send = (ev: Event) => controller.enqueue(encodeEvent(ev));
       let pagesCrawled = 0;
       let articlesFound = 0;
-      let cursor = journal.lastListPage;
+      let cursor = refreshRecent ? 0 : journal.lastListPage;
 
-      for (let i = 0; i < pageCount; i++) {
-        const nextPage = cursor + 1;
-        send({ type: "page_start", page: nextPage, index: i + 1, total: pageCount });
+      try {
+        for (let i = 0; i < pageCount; i++) {
+          if (req.signal.aborted) break;
+          const nextPage = cursor + 1;
+          send({ type: "page_start", page: nextPage, index: i + 1, total: pageCount });
 
-        let result;
-        try {
-          result = await fetchJournalListPage(journal.journalId, nextPage, { headless });
-        } catch (err) {
-          const message =
-            err instanceof SpringerCrawlError || err instanceof Error
-              ? err.message
-              : "Failed to crawl list page";
-          send({ type: "stopped", reason: `Page ${nextPage}: ${message}` });
-          break;
+          let result;
+          try {
+            result = await fetchJournalListPage(journal.journalId, nextPage, { headless });
+          } catch (err) {
+            const message =
+              err instanceof SpringerCrawlError || err instanceof Error
+                ? err.message
+                : "Failed to crawl list page";
+            send({ type: "stopped", reason: `Page ${nextPage}: ${message}` });
+            break;
+          }
+
+          if (result.articles.length === 0) {
+            send({ type: "stopped", reason: `Page ${nextPage} returned no articles — likely past the last page` });
+            break;
+          }
+
+          const added = await saveListArticles(journal.id, result.articles);
+
+          cursor = nextPage;
+          pagesCrawled++;
+          articlesFound += result.articles.length;
+
+          if (!refreshRecent) {
+            await prisma.springerJournal.updateMany({
+              where: { id: journal.id, lastListPage: { lt: cursor } },
+              data: {
+                lastListPage: cursor,
+                ...(result.totalArticles != null ? { totalArticles: result.totalArticles } : {}),
+              },
+            });
+          }
+
+          send({
+            type: "page_done",
+            page: nextPage,
+            found: result.articles.length,
+            added,
+            totalArticles: result.totalArticles,
+            dois: result.articles.map((a) => a.doi),
+          });
+          if (result.totalArticles != null && cursor * 50 >= result.totalArticles) break;
         }
 
-        if (result.articles.length === 0) {
-          send({ type: "stopped", reason: `Page ${nextPage} returned no articles — likely past the last page` });
-          break;
-        }
-
-        const added = await saveListArticles(journal.id, result.articles);
-
-        cursor = nextPage;
-        pagesCrawled++;
-        articlesFound += result.articles.length;
-
-        await prisma.springerJournal.update({
-          where: { id: journal.id },
-          data: {
-            lastListPage: cursor,
-            ...(result.totalArticles != null ? { totalArticles: result.totalArticles } : {}),
-          },
-        });
-
-        send({
-          type: "page_done",
-          page: nextPage,
-          found: result.articles.length,
-          added,
-          totalArticles: result.totalArticles,
-          dois: result.articles.map((a) => a.doi),
-        });
+        send({ type: "done", pagesCrawled, articlesFound });
+      } catch (err) {
+        send({ type: "fatal", message: err instanceof Error ? err.message : "List crawl failed" });
       }
-
-      send({ type: "done", pagesCrawled, articlesFound });
       controller.close();
     },
   });

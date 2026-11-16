@@ -179,6 +179,26 @@ export type SpringerVolume = {
   issues: SpringerIssueRef[];
 };
 
+const volumeCache = new Map<string, { at: number; volumes: SpringerVolume[] }>();
+
+export async function loadJournalVolumes(journalId: string, opts: CrawlOptions, refresh = false) {
+  const cached = volumeCache.get(journalId);
+  if (!refresh && cached && Date.now() - cached.at < 15 * 60_000) return cached.volumes;
+  const volumes = await fetchJournalVolumes(journalId, opts);
+  if (volumes.length) volumeCache.set(journalId, { at: Date.now(), volumes });
+  return volumes;
+}
+
+export function isHistoricalIssue(volumes: SpringerVolume[], volume: number, issue: string) {
+  const newest = volumes.find((entry) => entry.issues.length > 0);
+  const entry = volumes.find((item) => item.volume === volume);
+  const ref = entry?.issues.find((item) => item.issue === issue);
+  if (!newest || !entry || !ref) return false;
+  if (entry.volume !== newest.volume || ref.issue !== newest.issues[0].issue) return true;
+  const year = Number(ref.month?.match(/\b\d{4}\b/)?.[0]);
+  return year < new Date().getUTCFullYear();
+}
+
 /**
  * Reads a journal's whole volumes-and-issues index (every volume with its
  * year range and every issue with its month — Springer renders it all on

@@ -175,6 +175,19 @@ model SpringerJournal {
   totalArticles Int? // from the list page's "Showing 1-50 of N articles" line
   createdAt     DateTime @default(now())
   articles      SpringerArticle[]
+  issueCrawls   SpringerIssueCrawl[]
+}
+
+model SpringerIssueCrawl {
+  journalId String
+  journal   SpringerJournal @relation(fields: [journalId], references: [id], onDelete: Cascade)
+  volume    Int
+  issue     String
+  dois      String[]
+  crawledAt DateTime
+  complete  Boolean
+
+  @@id([journalId, volume, issue])
 }
 
 // One row per article discovered on a journal's article-list page, keyed by
