@@ -7,7 +7,10 @@ import { ensureMessageIds } from "@/lib/message-ids";
 export const dynamic = "force-dynamic";
 
 async function loadOwnedChat(chatId: string, userId: string) {
-  const chat = await prisma.chat.findUnique({ where: { id: chatId } });
+  const chat = await prisma.chat.findUnique({
+    where: { id: chatId },
+    include: { springerArticle: { select: { id: true, journalId: true, title: true, doi: true } } },
+  });
   if (!chat || chat.userId !== userId) return null;
   return chat;
 }

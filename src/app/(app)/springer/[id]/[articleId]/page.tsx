@@ -2,8 +2,8 @@
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { useParams } from "next/navigation";
-import { ChevronLeft, Download, ExternalLink, FileText, Loader2 } from "lucide-react";
+import { useParams, useRouter } from "next/navigation";
+import { ChevronLeft, Download, ExternalLink, FileText, Loader2, MessageSquareText } from "lucide-react";
 import { useAuth } from "@/components/auth/auth-context";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -34,9 +34,31 @@ type ArticleDetail = {
 export default function SpringerArticleDetailPage() {
   const params = useParams<{ id: string; articleId: string }>();
   const { authFetch } = useAuth();
+  const router = useRouter();
   const [article, setArticle] = useState<ArticleDetail | null>(null);
+  const [openingChat, setOpeningChat] = useState(false);
+  const [chatError, setChatError] = useState<string | null>(null);
   const [pdfBusy, setPdfBusy] = useState<"open" | "download" | null>(null);
   const [pdfActionError, setPdfActionError] = useState<string | null>(null);
+
+  const startChat = async () => {
+    if (!article) return;
+    setOpeningChat(true);
+    setChatError(null);
+    try {
+      const res = await authFetch("/api/chats", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ springerArticleId: article.id }),
+      });
+      const data = await res.json();
+      if (!res.ok) throw new Error(data.error ?? "Could not create the article chat");
+      router.push(`/c-assist-ui/${data.chat.id}`);
+    } catch (err) {
+      setChatError(err instanceof Error ? err.message : "Could not create the article chat");
+      setOpeningChat(false);
+    }
+  };
 
   // The PDF route needs the Bearer token, which a plain <a href> can't
   // send — so fetch it as a blob and hand the browser an object URL.
@@ -125,7 +147,13 @@ export default function SpringerArticleDetailPage() {
           </a>
         </div>
 
-        <PdfPanel article={article} busy={pdfBusy} onLoad={loadPdf} actionError={pdfActionError} />
+        <PdfPanel article={article} busy={pdfBusy} onLoad={loadPdf} actionError={pdfActionError}>
+          <Button size="sm" variant="outline" onClick={() => void startChat()} disabled={openingChat}>
+            {openingChat ? <Loader2 size={14} className="animate-spin" /> : <MessageSquareText size={14} />}
+            Chat about this article
+          </Button>
+          {chatError && <p role="alert" className="text-xs text-destructive">{chatError}</p>}
+        </PdfPanel>
 
         {article.pdfStatus === "downloaded" && (
           <div className="mb-6">
@@ -172,11 +200,13 @@ function PdfPanel({
   busy,
   onLoad,
   actionError,
+  children,
 }: {
   article: ArticleDetail;
   busy: "open" | "download" | null;
   onLoad: (mode: "open" | "download") => void;
   actionError: string | null;
+  children: React.ReactNode;
 }) {
   const statusText: Record<string, string> = {
     downloaded: "PDF downloaded",
@@ -204,8 +234,8 @@ function PdfPanel({
             )}
           </div>
         </div>
-        {article.pdfStatus === "downloaded" && (
-          <div className="flex items-center gap-2 shrink-0">
+        <div className="flex flex-wrap items-center gap-2">
+          {article.pdfStatus === "downloaded" && <>
             <Button size="sm" variant="outline" onClick={() => onLoad("open")} disabled={busy !== null}>
               {busy === "open" ? <Loader2 size={13} className="animate-spin" /> : <ExternalLink size={13} />}
               Open
@@ -214,8 +244,9 @@ function PdfPanel({
               {busy === "download" ? <Loader2 size={13} className="animate-spin" /> : <Download size={13} />}
               Download
             </Button>
-          </div>
-        )}
+          </>}
+          {children}
+        </div>
       </div>
       {article.pdfError && article.pdfStatus !== "downloaded" && (
         <p className="font-mono text-[10.5px] text-muted-foreground mt-2 break-words">{article.pdfError}</p>

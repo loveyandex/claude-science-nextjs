@@ -230,6 +230,7 @@ model SpringerArticle {
 
   createdAt     DateTime        @default(now())
   updatedAt     DateTime        @updatedAt
+  chats         Chat[]
 
   @@index([journalId])
   @@index([status])
@@ -300,10 +301,13 @@ model Chat {
   model     String   @default("gpt-oss")
   thinking  Boolean  @default(false)
   messages  Json     @default("[]")
+  springerArticleId String?
+  springerArticle SpringerArticle? @relation(fields: [springerArticleId], references: [id], onDelete: SetNull)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
   @@index([userId, updatedAt])
+  @@index([springerArticleId])
 }
 
 // --- Research workflows (/workflows) ----------------------------------------

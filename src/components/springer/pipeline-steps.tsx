@@ -198,6 +198,36 @@ export function PipelineSteps({
   const [providerUrl, setProviderUrl] = useState<string | null | undefined>(undefined);
   const [stopRequested, setStopRequested] = useState(false);
   const stopRef = useRef(false);
+  const [serverPdfRunning, setServerPdfRunning] = useState<boolean | null>(null);
+  const refreshBatch = useRef(onBatchDone);
+  refreshBatch.current = onBatchDone;
+
+  useEffect(() => {
+    let disposed = false;
+    let timer: ReturnType<typeof setTimeout>;
+    let wasRunning = false;
+    setServerPdfRunning(null);
+    const poll = async () => {
+      try {
+        const res = await authFetch(`/api/springer/journals/${journalDbId}/fetch-pdfs`, { cache: "no-store" });
+        if (!res.ok) return;
+        const { running } = await res.json();
+        if (disposed) return;
+        setServerPdfRunning(running);
+        if (running || wasRunning) refreshBatch.current();
+        wasRunning = running;
+      } catch {
+        // Keep the last known status until the next successful poll.
+      } finally {
+        if (!disposed) timer = setTimeout(poll, 2500);
+      }
+    };
+    void poll();
+    return () => {
+      disposed = true;
+      clearTimeout(timer);
+    };
+  }, [authFetch, journalDbId]);
 
   useEffect(() => {
     authFetch("/api/settings/springer", { cache: "no-store" })
@@ -209,6 +239,7 @@ export function PipelineSteps({
   const scopeBody = dois ? { dois } : {};
   const busy = running !== null;
   const locked = busy || !!disabled;
+  const pdfLocked = locked || serverPdfRunning !== false;
   const pdfTodo = stats ? stats.pdf.untried + stats.pdf.failed + (retryNotFound ? stats.pdf.notFound : 0) : null;
 
   const runDetailsBatch = async (): Promise<DetailsResult> => {
@@ -256,6 +287,10 @@ export function PipelineSteps({
         if (ev.type === "downloaded") onLog(`✓ ${ev.doi} — ${formatBytes(ev.size as number)} from ${ev.sourceUrl}`);
         if (ev.type === "not_found") onLog(`– ${ev.doi}: not found. ${ev.message}`);
         if (ev.type === "error") onLog(`✗ ${ev.doi}: ${ev.message}`);
+        if (ev.type === "fatal") {
+          result.stopped = true;
+          onLog(`PDF batch failed: ${ev.message}`);
+        }
         if (ev.type === "stopped") {
           result.stopped = true;
           onLog(`Stopped: ${ev.reason}`);
@@ -350,7 +385,7 @@ export function PipelineSteps({
         <div className="flex items-center gap-2 flex-wrap mt-3">
           <Button
             onClick={() => run("all")}
-            disabled={locked || !stats || (stats.pending === 0 && (pdfTodo ?? 0) === 0)}
+            disabled={pdfLocked || !stats || (stats.pending === 0 && (pdfTodo ?? 0) === 0)}
             size="sm"
           >
             {running === "all" ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
@@ -414,10 +449,11 @@ export function PipelineSteps({
           </Link>
         ) : (
           <div className="flex items-center gap-2 flex-wrap">
-            <Button onClick={() => run("pdfs")} disabled={locked || providerUrl === undefined || pdfTodo === 0} size="sm">
+            <Button onClick={() => run("pdfs")} disabled={pdfLocked || providerUrl === undefined || pdfTodo === 0} size="sm">
               {running === "pdfs" ? <Loader2 size={13} className="animate-spin" /> : <Play size={13} />}
               Fetch next batch
             </Button>
+            {serverPdfRunning && <span role="status" className="text-xs text-muted-foreground">PDF downloads running</span>}
             {running === "pdfs" && pdfsKeepGoing && stopButton}
             <NumberField label="batch size" value={pdfBatch} onChange={setPdfBatch} max={50} width="w-14" disabled={busy} />
             <CheckboxField

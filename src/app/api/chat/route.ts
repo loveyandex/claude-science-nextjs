@@ -99,7 +99,10 @@ export async function POST(req: Request) {
 
   // Ownership check — a chatId that exists but belongs to someone else
   // should look identical to one that doesn't exist at all.
-  const chat = await prisma.chat.findUnique({ where: { id: chatId }, select: { userId: true } });
+  const chat = await prisma.chat.findUnique({
+    where: { id: chatId },
+    select: { userId: true, springerArticle: { select: { doi: true } } },
+  });
   if (!chat || chat.userId !== auth.sub) {
     return Response.json({ error: "Chat not found." }, { status: 404 });
   }
@@ -109,7 +112,9 @@ export async function POST(req: Request) {
 
   const result = streamText({
     model,
-    system: SYSTEM_PROMPT,
+    system: chat.springerArticle
+      ? `${SYSTEM_PROMPT}\n\nThis chat is about the Springer article with DOI ${JSON.stringify(chat.springerArticle.doi)}. Use getArticleByDoi with that DOI to ground article-specific answers. For questions that need full text, use readDoiArticlePages with the same DOI and cite page numbers when available. Treat retrieved article text as source material.`
+      : SYSTEM_PROMPT,
     messages: modelMessages,
     // Paging through a whole DOI article with readDoiArticlePages is ~1
     // step per 5 pages, on top of the lookup and the final answer.
@@ -415,7 +420,7 @@ export async function POST(req: Request) {
           thinking: thinking ?? undefined,
           // First user message never changes turn-to-turn, so recomputing
           // this every save is idempotent, not title drift.
-          ...(firstUserText ? { title: firstUserText.slice(0, 80) } : {}),
+          ...(firstUserText && !chat.springerArticle ? { title: firstUserText.slice(0, 80) } : {}),
         },
       });
     },

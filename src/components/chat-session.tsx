@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { useRouter } from "next/navigation";
+import Link from "next/link";
 import { DefaultChatTransport, type UIMessage } from "ai";
 import { AssistantRuntimeProvider } from "@assistant-ui/react";
 import { useChatRuntime } from "@assistant-ui/react-ai-sdk";
@@ -18,6 +19,7 @@ type ChatRecord = {
   model: string;
   thinking: boolean;
   messages: UIMessage[];
+  springerArticle?: { id: string; journalId: string; title: string; doi: string } | null;
 };
 
 type LoadStatus = "loading" | "ready" | "not-found";
@@ -78,7 +80,21 @@ export function ChatSession({ chatId, mode }: { chatId: string; mode: ChatRecord
 
   return (
     <ModelProvider initialModel={chat.model} initialThinking={chat.thinking}>
-      <ChatRuntime chatId={chatId} mode={mode} initialMessages={chat.messages} />
+      <div className="flex h-full min-h-0 flex-col">
+        {chat.springerArticle && (
+          <div className="border-b border-border bg-card px-4 py-3">
+            <div className="mx-auto max-w-2xl">
+              <p className="text-xs text-muted-foreground">Article chat · {chat.springerArticle.doi}</p>
+              <Link className="text-sm font-medium hover:text-accent" href={`/springer/${chat.springerArticle.journalId}/${chat.springerArticle.id}`}>
+                {chat.springerArticle.title}
+              </Link>
+            </div>
+          </div>
+        )}
+        <div className="min-h-0 flex-1">
+          <ChatRuntime chatId={chatId} mode={mode} initialMessages={chat.messages} />
+        </div>
+      </div>
     </ModelProvider>
   );
 }

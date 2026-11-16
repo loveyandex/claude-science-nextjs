@@ -8,6 +8,7 @@ const createSchema = z.object({
   mode: z.enum(["chat", "chat-assist-ui"]).default("chat"),
   model: z.string().optional(),
   thinking: z.boolean().optional(),
+  springerArticleId: z.string().min(1).max(100).optional(),
 });
 
 export async function POST(req: Request) {
@@ -20,10 +21,21 @@ export async function POST(req: Request) {
     return Response.json({ error: "Invalid input." }, { status: 400 });
   }
 
+  const article = parsed.data.springerArticleId
+    ? await prisma.springerArticle.findUnique({
+        where: { id: parsed.data.springerArticleId },
+        select: { id: true, title: true },
+      })
+    : null;
+  if (parsed.data.springerArticleId && !article) {
+    return Response.json({ error: "Springer article not found." }, { status: 404 });
+  }
+
   const chat = await prisma.chat.create({
     data: {
       userId: auth.sub,
-      mode: parsed.data.mode,
+      mode: article ? "chat-assist-ui" : parsed.data.mode,
+      ...(article ? { springerArticleId: article.id, title: article.title.slice(0, 200) } : {}),
       model: parsed.data.model ?? "gpt-oss",
       thinking: parsed.data.thinking ?? false,
     },

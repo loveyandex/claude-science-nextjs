@@ -448,7 +448,7 @@ export default function SpringerJournalDetailPage() {
 
         <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 mb-6">
           <StatCard label="crawled" value={journal.articleCount} />
-          <StatCard label="indexed" value={journal.indexed} accent />
+          <StatCard label="indexed →" value={journal.indexed} accent href={`/springer/${journalDbId}/indexeds`} />
           <StatCard label="pending →" value={journal.pending} href={`/springer/${journalDbId}/pending`} />
           <StatCard label="open access" value={journal.openAccess} />
           <StatCard
