@@ -41,15 +41,16 @@ import { useRtl } from "@/components/rtl-context";
 const actionButton =
   "flex size-8 items-center justify-center rounded-md text-muted-foreground transition-colors hover:bg-foreground/5 hover:text-foreground";
 
-export function ThreadAssistUI() {
+export function ThreadAssistUI({ composerContext }: { composerContext?: React.ReactNode }) {
   const { rtl } = useRtl();
+  const composer = <Composer context={composerContext} />;
   return (
     <ThreadPrimitive.Root
       dir={rtl ? "rtl" : "ltr"}
       className="flex h-full flex-col items-stretch bg-background font-serif text-foreground"
     >
       <AuiIf condition={(s) => s.thread.isEmpty}>
-        <EmptyState />
+        <EmptyState composer={composer} />
       </AuiIf>
       <AuiIf condition={(s) => !s.thread.isEmpty}>
         <ThreadPrimitive.Viewport className="flex grow flex-col overflow-y-auto scrollbar-thin px-4 pt-10">
@@ -57,7 +58,7 @@ export function ThreadAssistUI() {
             {() => <ChatMessage />}
           </ThreadPrimitive.Messages>
           <ThreadPrimitive.ViewportFooter className="sticky bottom-0 mx-auto mt-auto w-full max-w-2xl bg-gradient-to-b from-transparent via-background/85 to-background pt-4 pb-3">
-            <Composer />
+            {composer}
             <p className="pt-2.5 text-center font-mono text-[11px] text-muted-foreground">
               assistant-ui reference build — same /api/chat backend as the main Chat page.
             </p>
@@ -68,21 +69,22 @@ export function ThreadAssistUI() {
   );
 }
 
-const EmptyState = () => (
+const EmptyState = ({ composer }: { composer: React.ReactNode }) => (
   <div className="flex grow flex-col items-center justify-center px-4">
     <div className="mx-auto flex w-full max-w-2xl flex-col items-stretch gap-5">
       <h1 className="flex items-center justify-center gap-3 font-serif text-3xl text-foreground sm:text-4xl">
         <Sparkle className="size-7 fill-accent text-accent" />
         <span>How can I help you today?</span>
       </h1>
-      <Composer />
+      {composer}
     </div>
   </div>
 );
 
-const Composer = () => {
+const Composer = ({ context }: { context?: React.ReactNode }) => {
   return (
     <ComposerPrimitive.Root className="flex w-full flex-col gap-2 rounded-2xl border border-border/70 bg-card px-3.5 pt-3.5 pb-3 shadow-sm">
+      {context}
       <ComposerPrimitive.Input
         placeholder="How can I help you today?"
         rows={1}

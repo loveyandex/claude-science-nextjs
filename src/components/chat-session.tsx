@@ -80,21 +80,7 @@ export function ChatSession({ chatId, mode }: { chatId: string; mode: ChatRecord
 
   return (
     <ModelProvider initialModel={chat.model} initialThinking={chat.thinking}>
-      <div className="flex h-full min-h-0 flex-col">
-        {chat.springerArticle && (
-          <div className="border-b border-border bg-card px-4 py-3">
-            <div className="mx-auto max-w-2xl">
-              <p className="text-xs text-muted-foreground">Article chat · {chat.springerArticle.doi}</p>
-              <Link className="text-sm font-medium hover:text-accent" href={`/springer/${chat.springerArticle.journalId}/${chat.springerArticle.id}`}>
-                {chat.springerArticle.title}
-              </Link>
-            </div>
-          </div>
-        )}
-        <div className="min-h-0 flex-1">
-          <ChatRuntime chatId={chatId} mode={mode} initialMessages={chat.messages} />
-        </div>
-      </div>
+      <ChatRuntime chatId={chatId} mode={mode} initialMessages={chat.messages} article={chat.springerArticle} />
     </ModelProvider>
   );
 }
@@ -103,10 +89,12 @@ function ChatRuntime({
   chatId,
   mode,
   initialMessages,
+  article,
 }: {
   chatId: string;
   mode: ChatRecord["mode"];
   initialMessages: UIMessage[];
+  article?: ChatRecord["springerArticle"];
 }) {
   const { getRequestBody } = useModelSelection();
   const { getToken } = useAuth();
@@ -129,7 +117,22 @@ function ChatRuntime({
 
   return (
     <AssistantRuntimeProvider runtime={runtime}>
-      {mode === "chat-assist-ui" ? <ThreadAssistUI /> : <Thread />}
+      {mode === "chat-assist-ui" ? (
+        <ThreadAssistUI
+          composerContext={article && (
+            <Link
+              href={`/springer/${article.journalId}/${article.id}`}
+              className="flex min-w-0 items-baseline gap-2 border-b border-border/70 pb-2 font-sans text-[11px] leading-4 hover:text-accent"
+              title={article.title}
+              dir="ltr"
+            >
+              <span className="shrink-0 text-muted-foreground">Article chat</span>
+              <span className="min-w-0 flex-1 truncate" dir="auto">{article.title}</span>
+              <span className="hidden shrink-0 text-muted-foreground sm:inline">{article.doi}</span>
+            </Link>
+          )}
+        />
+      ) : <Thread />}
     </AssistantRuntimeProvider>
   );
 }
